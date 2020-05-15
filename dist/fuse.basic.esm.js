@@ -1,5 +1,5 @@
 /**
- * Fuse.js v5.2.0-alpha.0 - Lightweight fuzzy-search (http://fusejs.io)
+ * Fuse.js v6.0.0 - Lightweight fuzzy-search (http://fusejs.io)
  *
  * Copyright (c) 2020 Kiro Risk (http://kiro.me)
  * All Rights Reserved. Apache Software License 2.0
@@ -7,81 +7,125 @@
  * http://www.apache.org/licenses/LICENSE-2.0
  */
 
-function bitapScore(
-  pattern,
-  { errors = 0, currentLocation = 0, expectedLocation = 0, distance = 100 }
-) {
-  const accuracy = errors / pattern.length;
-  const proximity = Math.abs(expectedLocation - currentLocation);
-
-  if (!distance) {
-    // Dodge divide by zero error.
-    return proximity ? 1.0 : accuracy
-  }
-
-  return accuracy + proximity / distance
-}
-
-function matchedIndiced(matchmask = [], minMatchCharLength = 1) {
-  let matchedIndices = [];
-  let start = -1;
-  let end = -1;
-  let i = 0;
-
-  for (let len = matchmask.length; i < len; i += 1) {
-    let match = matchmask[i];
-    if (match && start === -1) {
-      start = i;
-    } else if (!match && start !== -1) {
-      end = i - 1;
-      if (end - start + 1 >= minMatchCharLength) {
-        matchedIndices.push([start, end]);
-      }
-      start = -1;
-    }
-  }
-
-  // (i-1 - start) + 1 => i - start
-  if (matchmask[i - 1] && i - start >= minMatchCharLength) {
-    matchedIndices.push([start, i - 1]);
-  }
-
-  return matchedIndices
-}
-
-const INFINITY = 1 / 0;
-
-const isArray = (value) =>
-  !Array.isArray
+function isArray(value) {
+  return !Array.isArray
     ? Object.prototype.toString.call(value) === '[object Array]'
-    : Array.isArray(value);
+    : Array.isArray(value)
+}
 
 // Adapted from:
 // https://github.com/lodash/lodash/blob/f4ca396a796435422bd4fd41fadbd225edddf175/.internal/baseToString.js
-const baseToString = (value) => {
+const INFINITY = 1 / 0;
+function baseToString(value) {
   // Exit early for strings to avoid a performance hit in some environments.
   if (typeof value == 'string') {
     return value
   }
   let result = value + '';
   return result == '0' && 1 / value == -INFINITY ? '-0' : result
-};
+}
 
-const toString = (value) => (value == null ? '' : baseToString(value));
+function toString(value) {
+  return value == null ? '' : baseToString(value)
+}
 
-const isString = (value) => typeof value === 'string';
+function isString(value) {
+  return typeof value === 'string'
+}
 
-const isNumber = (value) => typeof value === 'number';
+function isNumber(value) {
+  return typeof value === 'number'
+}
 
-const isDefined = (value) => value !== undefined && value !== null;
+function isObject(value) {
+  return typeof value === 'object'
+}
+
+function isDefined(value) {
+  return value !== undefined && value !== null
+}
+
+function isBlank(value) {
+  return !value.trim().length
+}
+
+const EXTENDED_SEARCH_UNAVAILABLE = 'Extended search is not available';
+
+const LOGICAL_SEARCH_UNAVAILABLE = 'Logical search is not available';
+
+const INCORRECT_INDEX_TYPE = "Incorrect 'index' type";
+
+const LOGICAL_SEARCH_INVALID_QUERY_FOR_KEY = (key) =>
+  `Invalid value for key ${key}`;
+
+const PATTERN_LENGTH_TOO_LARGE = (max) =>
+  `Pattern length exceeds max of ${max}.`;
+
+const MISSING_KEY_PROPERTY = (name) => `Missing ${name} property in key`;
+
+const INVALID_KEY_WEIGHT_VALUE = (key) =>
+  `Property 'weight' in key '${key}' must be a positive integer`;
+
+const hasOwn = Object.prototype.hasOwnProperty;
+
+class KeyStore {
+  constructor(keys) {
+    this._keys = {};
+    this._keyNames = [];
+
+    let totalWeight = 0;
+
+    keys.forEach((key) => {
+      let keyName;
+      let weight = 1;
+
+      if (isString(key)) {
+        keyName = key;
+      } else {
+        if (!hasOwn.call(key, 'name')) {
+          throw new Error(MISSING_KEY_PROPERTY('name'))
+        }
+        keyName = key.name;
+
+        if (hasOwn.call(key, 'weight')) {
+          weight = key.weight;
+
+          if (weight <= 0) {
+            throw new Error(INVALID_KEY_WEIGHT_VALUE(keyName))
+          }
+        }
+      }
+
+      this._keyNames.push(keyName);
+
+      this._keys[keyName] = { weight };
+
+      totalWeight += weight;
+    });
+
+    // Normalize weights so that their sum is equal to 1
+    this._keyNames.forEach((key) => {
+      this._keys[key].weight /= totalWeight;
+    });
+  }
+  get(key, name) {
+    return this._keys[key] && this._keys[key][name]
+  }
+  keys() {
+    return this._keyNames
+  }
+  toJSON() {
+    return JSON.stringify(this._keys)
+  }
+}
 
 function get(obj, path) {
   let list = [];
   let arr = false;
 
-  const _get = (obj, path) => {
+  const deepGet = (obj, path) => {
     if (!path) {
-      // If there's no path left, we've gotten to the object we care about.
+      // If there's no path left, we've arrived at the object we care about.
       list.push(obj);
     } else {
       const dotIndex = path.indexOf('.');
@@ -96,30 +140,28 @@ function get(obj, path) {
 
       const value = obj[key];
 
-      if (isDefined(value)) {
-        if (!remaining && (isString(value) || isNumber(value))) {
-          list.push(toString(value));
-        } else if (isArray(value)) {
-          arr = true;
-          // Search each item in the array.
-          for (let i = 0, len = value.length; i < len; i += 1) {
-            _get(value[i], remaining);
-          }
-        } else if (remaining) {
-          // An object. Recurse further.
-          _get(value, remaining);
+      if (!isDefined(value)) {
+        return
+      }
+
+      if (!remaining && (isString(value) || isNumber(value))) {
+        list.push(toString(value));
+      } else if (isArray(value)) {
+        arr = true;
+        // Search each item in the array.
+        for (let i = 0, len = value.length; i < len; i += 1) {
+          deepGet(value[i], remaining);
         }
+      } else if (remaining) {
+        // An object. Recurse further.
+        deepGet(value, remaining);
       }
     }
   };
 
-  _get(obj, path);
+  deepGet(obj, path);
 
-  if (arr) {
-    return list
-  }
-
-  return list[0]
+  return arr ? list : list[0]
 }
 
 const MatchOptions = {
@@ -144,8 +186,9 @@ const BasicOptions = {
   keys: [],
   // Whether to sort the result list, by score
   shouldSort: true,
-  // Default sort function
-  sortFn: (a, b) => a.score - b.score
+  // Default sort function: sort by ascending score, ascending index
+  sortFn: (a, b) =>
+    a.score === b.score ? (a.idx < b.idx ? -1 : 1) : a.score < b.score ? -1 : 1
 };
 
 const FuzzyOptions = {
@@ -177,7 +220,272 @@ var Config = {
   ...AdvancedOptions
 };
 
-function bitapSearch(
+const SPACE = /[^ ]+/g;
+
+// Field-length norm: the shorter the field, the higher the weight.
+// Set to 3 decimals to reduce index size.
+function norm(mantissa = 3) {
+  const cache = new Map();
+
+  return {
+    get(value) {
+      const numTokens = value.match(SPACE).length;
+
+      if (cache.has(numTokens)) {
+        return cache.get(numTokens)
+      }
+
+      const n = parseFloat((1 / Math.sqrt(numTokens)).toFixed(mantissa));
+
+      cache.set(numTokens, n);
+
+      return n
+    },
+    clear() {
+      cache.clear();
+    }
+  }
+}
+
+class FuseIndex {
+  constructor({ getFn = Config.getFn } = {}) {
+    this.norm = norm(3);
+    this.getFn = getFn;
+    this.isCreated = false;
+
+    this.setRecords();
+  }
+  setCollection(docs = []) {
+    this.docs = docs;
+  }
+  setRecords(records = []) {
+    this.records = records;
+  }
+  setKeys(keys = []) {
+    this.keys = keys;
+  }
+  create() {
+    if (this.isCreated || !this.docs.length) {
+      return
+    }
+
+    this.isCreated = true;
+
+    // List is Array<String>
+    if (isString(this.docs[0])) {
+      this.docs.forEach((doc, docIndex) => {
+        this._addString(doc, docIndex);
+      });
+    } else {
+      // List is Array<Object>
+      this.docs.forEach((doc, docIndex) => {
+        this._addObject(doc, docIndex);
+      });
+    }
+
+    this.norm.clear();
+  }
+  // Adds a doc to the end of the index
+  add(doc) {
+    const idx = this.size();
+
+    if (isString(doc)) {
+      this._addString(doc, idx);
+    } else {
+      this._addObject(doc, idx);
+    }
+  }
+  // Removes the doc at the specified index of the index
+  removeAt(idx) {
+    this.records.splice(idx, 1);
+
+    // Change ref index of every subsquent doc
+    for (let i = idx, len = this.size(); i < len; i += 1) {
+      this.records[i].i -= 1;
+    }
+  }
+  size() {
+    return this.records.length
+  }
+  _addString(doc, docIndex) {
+    if (!isDefined(doc) || isBlank(doc)) {
+      return
+    }
+
+    let record = {
+      v: doc,
+      i: docIndex,
+      n: this.norm.get(doc)
+    };
+
+    this.records.push(record);
+  }
+  _addObject(doc, docIndex) {
+    let record = { i: docIndex, $: {} };
+
+    // Iterate over every key (i.e, path), and fetch the value at that key
+    this.keys.forEach((key, keyIndex) => {
+      let value = this.getFn(doc, key);
+
+      if (!isDefined(value)) {
+        return
+      }
+
+      if (isArray(value)) {
+        let subRecords = [];
+        const stack = [{ nestedArrIndex: -1, value }];
+
+        while (stack.length) {
+          const { nestedArrIndex, value } = stack.pop();
+
+          if (!isDefined(value)) {
+            continue
+          }
+
+          if (isString(value) && !isBlank(value)) {
+            let subRecord = {
+              v: value,
+              i: nestedArrIndex,
+              n: this.norm.get(value)
+            };
+
+            subRecords.push(subRecord);
+          } else if (isArray(value)) {
+            value.forEach((item, k) => {
+              stack.push({
+                nestedArrIndex: k,
+                value: item
+              });
+            });
+          }
+        }
+        record.$[keyIndex] = subRecords;
+      } else if (!isBlank(value)) {
+        let subRecord = {
+          v: value,
+          n: this.norm.get(value)
+        };
+
+        record.$[keyIndex] = subRecord;
+      }
+    });
+
+    this.records.push(record);
+  }
+  toJSON() {
+    return {
+      keys: this.keys,
+      records: this.records
+    }
+  }
+}
+
+function createIndex(keys, docs, { getFn = Config.getFn } = {}) {
+  let myIndex = new FuseIndex({ getFn });
+  myIndex.setKeys(keys);
+  myIndex.setCollection(docs);
+  myIndex.create();
+  return myIndex
+}
+
+function parseIndex(data, { getFn = Config.getFn } = {}) {
+  const { keys, records } = data;
+  let myIndex = new FuseIndex({ getFn });
+  myIndex.setKeys(keys);
+  myIndex.setRecords(records);
+  return myIndex
+}
+
+function transformMatches(result, data) {
+  const matches = result.matches;
+  data.matches = [];
+
+  if (!isDefined(matches)) {
+    return
+  }
+
+  matches.forEach((match) => {
+    if (!isDefined(match.indices) || !match.indices.length) {
+      return
+    }
+
+    const { indices, value } = match;
+
+    let obj = {
+      indices,
+      value
+    };
+
+    if (match.key) {
+      obj.key = match.key;
+    }
+
+    if (match.idx > -1) {
+      obj.refIndex = match.idx;
+    }
+
+    data.matches.push(obj);
+  });
+}
+
+function transformScore(result, data) {
+  data.score = result.score;
+}
+
+function computeScore(
+  pattern,
+  {
+    errors = 0,
+    currentLocation = 0,
+    expectedLocation = 0,
+    distance = Config.distance
+  } = {}
+) {
+  const accuracy = errors / pattern.length;
+  const proximity = Math.abs(expectedLocation - currentLocation);
+
+  if (!distance) {
+    // Dodge divide by zero error.
+    return proximity ? 1.0 : accuracy
+  }
+
+  return accuracy + proximity / distance
+}
+
+function convertMaskToIndices(
+  matchmask = [],
+  minMatchCharLength = Config.minMatchCharLength
+) {
+  let indices = [];
+  let start = -1;
+  let end = -1;
+  let i = 0;
+
+  for (let len = matchmask.length; i < len; i += 1) {
+    let match = matchmask[i];
+    if (match && start === -1) {
+      start = i;
+    } else if (!match && start !== -1) {
+      end = i - 1;
+      if (end - start + 1 >= minMatchCharLength) {
+        indices.push([start, end]);
+      }
+      start = -1;
+    }
+  }
+
+  // (i-1 - start) + 1 => i - start
+  if (matchmask[i - 1] && i - start >= minMatchCharLength) {
+    indices.push([start, i - 1]);
+  }
+
+  return indices
+}
+
+// Machine word size
+const MAX_BITS = 32;
+
+function search(
   text,
   pattern,
   patternAlphabet,
@@ -190,6 +498,10 @@ function bitapSearch(
     includeMatches = Config.includeMatches
   } = {}
 ) {
+  if (pattern.length > MAX_BITS) {
+    throw new Error(PATTERN_LENGTH_TOO_LARGE(MAX_BITS))
+  }
+
   const patternLen = pattern.length;
   // Set starting location at beginning text and initialize the alphabet.
   const textLen = text.length;
@@ -198,34 +510,36 @@ function bitapSearch(
   // Highest score beyond which we give up.
   let currentThreshold = threshold;
   // Is there a nearby exact match? (speedup)
-  let bestLocation = text.indexOf(pattern, expectedLocation);
+  let bestLocation = expectedLocation;
 
-  // a mask of the matches
+  // A mask of the matches, used for building the indices
   const matchMask = [];
-  for (let i = 0; i < textLen; i += 1) {
-    matchMask[i] = 0;
+
+  if (includeMatches) {
+    for (let i = 0; i < textLen; i += 1) {
+      matchMask[i] = 0;
+    }
   }
 
-  if (bestLocation !== -1) {
-    let score = bitapScore(pattern, {
-      errors: 0,
-      currentLocation: bestLocation,
+  let index;
+
+  // Get all exact matches, here for speed up
+  while ((index = text.indexOf(pattern, bestLocation)) > -1) {
+    let score = computeScore(pattern, {
+      currentLocation: index,
       expectedLocation,
       distance
     });
+
     currentThreshold = Math.min(score, currentThreshold);
+    bestLocation = index + patternLen;
 
-    // What about in the other direction? (speed up)
-    bestLocation = text.lastIndexOf(pattern, expectedLocation + patternLen);
-
-    if (bestLocation !== -1) {
-      let score = bitapScore(pattern, {
-        errors: 0,
-        currentLocation: bestLocation,
-        expectedLocation,
-        distance
-      });
-      currentThreshold = Math.min(score, currentThreshold);
+    if (includeMatches) {
+      let i = 0;
+      while (i < patternLen) {
+        matchMask[index + i] = 1;
+        i += 1;
+      }
     }
   }
 
@@ -236,7 +550,7 @@ function bitapSearch(
   let finalScore = 1;
   let binMax = patternLen + textLen;
 
-  const mask = 1 << (patternLen <= 31 ? patternLen - 1 : 30);
+  const mask = 1 << (patternLen <= MAX_BITS - 1 ? patternLen - 1 : MAX_BITS - 2);
 
   for (let i = 0; i < patternLen; i += 1) {
     // Scan for the best match; each iteration allows for one more error.
@@ -246,7 +560,7 @@ function bitapSearch(
     let binMid = binMax;
 
     while (binMin < binMid) {
-      const score = bitapScore(pattern, {
+      const score = computeScore(pattern, {
         errors: i,
         currentLocation: expectedLocation + binMid,
         expectedLocation,
@@ -279,7 +593,7 @@ function bitapSearch(
       let currentLocation = j - 1;
       let charMatch = patternAlphabet[text.charAt(currentLocation)];
 
-      if (charMatch) {
+      if (charMatch && includeMatches) {
         matchMask[currentLocation] = 1;
       }
 
@@ -293,7 +607,7 @@ function bitapSearch(
       }
 
       if (bitArr[j] & mask) {
-        finalScore = bitapScore(pattern, {
+        finalScore = computeScore(pattern, {
           errors: i,
           currentLocation,
           expectedLocation,
@@ -319,7 +633,7 @@ function bitapSearch(
     }
 
     // No hope for a (better) match at greater error levels.
-    const score = bitapScore(pattern, {
+    const score = computeScore(pattern, {
       errors: i + 1,
       currentLocation: expectedLocation,
       expectedLocation,
@@ -336,17 +650,17 @@ function bitapSearch(
   let result = {
     isMatch: bestLocation >= 0,
     // Count exact matches (those with a score of 0) to be "almost" exact
-    score: !finalScore ? 0.001 : finalScore
+    score: Math.max(0.001, finalScore)
   };
 
   if (includeMatches) {
-    result.matchedIndices = matchedIndiced(matchMask, minMatchCharLength);
+    result.indices = convertMaskToIndices(matchMask, minMatchCharLength);
   }
 
   return result
 }
 
-function patternAlphabet(pattern) {
+function createPatternAlphabet(pattern) {
   let mask = {};
   let len = pattern.length;
 
@@ -361,19 +675,10 @@ function patternAlphabet(pattern) {
   return mask
 }
 
-// Machine word size
-const MAX_BITS = 32;
-
 class BitapSearch {
   constructor(
     pattern,
-    // Deconstructed in this fashion purely for speed-up, since a new instance
-    // of this class is created every time a pattern is created. Otherwise, a spread
-    // operation would be performed directly withing the contructor, which may slow
-    // done searches.
-
-    options = ({
-      /*eslint-disable no-undef*/
+    {
       location = Config.location,
       threshold = Config.threshold,
       distance = Config.distance,
@@ -381,27 +686,34 @@ class BitapSearch {
       findAllMatches = Config.findAllMatches,
       minMatchCharLength = Config.minMatchCharLength,
       isCaseSensitive = Config.isCaseSensitive
-      /*eslint-enable no-undef*/
-    } = {})
+    } = {}
   ) {
-    this.options = options;
+    this.options = {
+      location,
+      threshold,
+      distance,
+      includeMatches,
+      findAllMatches,
+      minMatchCharLength,
+      isCaseSensitive
+    };
 
-    if (pattern.length > MAX_BITS) {
-      throw new Error(`Pattern length exceeds max of ${MAX_BITS}.`)
+    this.pattern = isCaseSensitive ? pattern : pattern.toLowerCase();
+
+    this.chunks = [];
+
+    let index = 0;
+    while (index < this.pattern.length) {
+      let pattern = this.pattern.substring(index, index + MAX_BITS);
+      this.chunks.push({
+        pattern,
+        alphabet: createPatternAlphabet(pattern)
+      });
+      index += MAX_BITS;
     }
-
-    this.pattern = this.options.isCaseSensitive
-      ? pattern
-      : pattern.toLowerCase();
-    this.patternAlphabet = patternAlphabet(this.pattern);
   }
 
-  searchIn(value) {
-    let text = value.$;
-    return this.searchInString(text)
-  }
-
-  searchInString(text) {
+  searchIn(text) {
     const { isCaseSensitive, includeMatches } = this.options;
 
     if (!isCaseSensitive) {
@@ -416,7 +728,7 @@ class BitapSearch {
       };
 
       if (includeMatches) {
-        result.matchedIndices = [[0, text.length - 1]];
+        result.indices = [[0, text.length - 1]];
       }
 
       return result
@@ -430,508 +742,366 @@ class BitapSearch {
       findAllMatches,
       minMatchCharLength
     } = this.options;
-    return bitapSearch(text, this.pattern, this.patternAlphabet, {
-      location,
-      distance,
-      threshold,
-      findAllMatches,
-      minMatchCharLength,
-      includeMatches
-    })
-  }
-}
 
-const NGRAM_LEN = 3;
+    let allIndices = [];
+    let totalScore = 0;
+    let hasMatches = false;
 
-function ngram(
-  text,
-  { n = NGRAM_LEN, pad = true, sort = false }
-) {
-  let nGrams = [];
+    this.chunks.forEach(({ pattern, alphabet }, i) => {
+      const { isMatch, score, indices } = search(text, pattern, alphabet, {
+        location: location + MAX_BITS * i,
+        distance,
+        threshold,
+        findAllMatches,
+        minMatchCharLength,
+        includeMatches
+      });
 
-  if (text === null || text === undefined) {
-    return nGrams
-  }
-
-  text = text.toLowerCase();
-  if (pad) {
-    text = ` ${text} `;
-  }
-
-  let index = text.length - n + 1;
-  if (index < 1) {
-    return nGrams
-  }
-
-  while (index--) {
-    nGrams[index] = text.substr(index, n);
-  }
-
-  if (sort) {
-    nGrams.sort((a, b) => (a == b ? 0 : a < b ? -1 : 1));
-  }
-
-  return nGrams
-}
-
-function createIndex(
-  keys,
-  list,
-  { getFn = get, ngrams = false } = {}
-) {
-  let indexedList = [];
-
-  // List is Array<String>
-  if (isString(list[0])) {
-    // Iterate over every string in the list
-    for (let i = 0, len = list.length; i < len; i += 1) {
-      const value = list[i];
-
-      if (isDefined(value)) {
-        // if (!isCaseSensitive) {
-        //   value = value.toLowerCase()
-        // }
-
-        let record = {
-          $: value,
-          idx: i
-        };
-
-        if (ngrams) {
-          record.ng = ngram(value, { sort: true });
-        }
-
-        indexedList.push(record);
-      }
-    }
-  } else {
-    // List is Array<Object>
-    const keysLen = keys.length;
-
-    for (let i = 0, len = list.length; i < len; i += 1) {
-      let item = list[i];
-
-      let record = { idx: i, $: {} };
-
-      // Iterate over every key (i.e, path), and fetch the value at that key
-      for (let j = 0; j < keysLen; j += 1) {
-        let key = keys[j];
-        let value = getFn(item, key);
-
-        if (!isDefined(value)) {
-          continue
-        }
-
-        if (isArray(value)) {
-          let subRecords = [];
-          const stack = [{ arrayIndex: -1, value }];
-
-          while (stack.length) {
-            const { arrayIndex, value } = stack.pop();
-
-            if (!isDefined(value)) {
-              continue
-            }
-
-            if (isString(value)) {
-              // if (!isCaseSensitive) {
-              //   v = v.toLowerCase()
-              // }
-
-              let subRecord = { $: value, idx: arrayIndex };
-
-              if (ngrams) {
-                subRecord.ng = ngram(value, { sort: true });
-              }
-
-              subRecords.push(subRecord);
-            } else if (isArray(value)) {
-              for (let k = 0, arrLen = value.length; k < arrLen; k += 1) {
-                stack.push({
-                  arrayIndex: k,
-                  value: value[k]
-                });
-              }
-            }
-          }
-          record.$[key] = subRecords;
-        } else {
-          // if (!isCaseSensitive) {
-          //   value = value.toLowerCase()
-          // }
-
-          let subRecord = { $: value };
-
-          if (ngrams) {
-            subRecord.ng = ngram(value, { sort: true });
-          }
-
-          record.$[key] = subRecord;
-        }
+      if (isMatch) {
+        hasMatches = true;
       }
 
-      indexedList.push(record);
-    }
-  }
+      totalScore += score;
 
-  return indexedList
-}
-
-class KeyStore {
-  constructor(keys) {
-    this._keys = {};
-    this._keyNames = [];
-    this._length = keys.length;
-
-    // Iterate over every key
-    if (keys.length && isString(keys[0])) {
-      for (let i = 0; i < this._length; i += 1) {
-        const key = keys[i];
-        this._keys[key] = {
-          weight: 1
-        };
-        this._keyNames.push(key);
+      if (isMatch && indices) {
+        allIndices = [...allIndices, ...indices];
       }
-    } else {
-      let totalWeight = 0;
+    });
 
-      for (let i = 0; i < this._length; i += 1) {
-        const key = keys[i];
-
-        if (!Object.prototype.hasOwnProperty.call(key, 'name')) {
-          throw new Error('Missing "name" property in key object')
-        }
-
-        const keyName = key.name;
-        this._keyNames.push(keyName);
-
-        if (!Object.prototype.hasOwnProperty.call(key, 'weight')) {
-          throw new Error('Missing "weight" property in key object')
-        }
-
-        const weight = key.weight;
-
-        if (weight <= 0 || weight >= 1) {
-          throw new Error(
-            '"weight" property in key must be in the range of (0, 1)'
-          )
-        }
-
-        this._keys[keyName] = {
-          weight
-        };
-
-        totalWeight += weight;
-      }
-
-      // Normalize weights so that their sum is equal to 1
-      for (let i = 0; i < this._length; i += 1) {
-        const keyName = this._keyNames[i];
-        const keyWeight = this._keys[keyName].weight;
-        this._keys[keyName].weight = keyWeight / totalWeight;
-      }
-    }
-  }
-  get(key, name) {
-    return this._keys[key] ? this._keys[key][name] : -1
-  }
-  keys() {
-    return this._keyNames
-  }
-  count() {
-    return this._length
-  }
-  toJSON() {
-    return JSON.stringify(this._keys)
-  }
-}
-
-function transformMatches(result, data) {
-  const matches = result.matches;
-  data.matches = [];
-
-  if (!isDefined(matches)) {
-    return
-  }
-
-  for (let i = 0, len = matches.length; i < len; i += 1) {
-    let match = matches[i];
-
-    if (!isDefined(match.indices) || match.indices.length === 0) {
-      continue
-    }
-
-    let obj = {
-      indices: match.indices,
-      value: match.value
+    let result = {
+      isMatch: hasMatches,
+      score: hasMatches ? totalScore / this.chunks.length : 1
     };
 
-    if (match.key) {
-      obj.key = match.key;
+    if (hasMatches && includeMatches) {
+      result.indices = allIndices;
     }
 
-    if (match.idx > -1) {
-      obj.refIndex = match.idx;
-    }
-
-    data.matches.push(obj);
+    return result
   }
-}
-
-function transformScore(result, data) {
-  data.score = result.score;
 }
 
 const registeredSearchers = [];
 
-class Fuse {
-  constructor(list, options = {}, index = null) {
-    this.options = { ...Config, ...options };
-
-    this._processKeys(this.options.keys);
-    this.setCollection(list, index);
-  }
-
-  static register(...args) {
-    registeredSearchers.push(...args);
-  }
-
-  setCollection(list, index = null) {
-    this.list = list;
-    this.listIsStringArray = isString(list[0]);
-
-    if (index) {
-      this.setIndex(index);
-    } else {
-      this.setIndex(this._createIndex());
+function createSearcher(pattern, options) {
+  for (let i = 0, len = registeredSearchers.length; i < len; i += 1) {
+    let searcherClass = registeredSearchers[i];
+    if (searcherClass.condition(pattern, options)) {
+      return new searcherClass(pattern, options)
     }
   }
 
-  setIndex(listIndex) {
-    this._indexedList = listIndex;
+  return new BitapSearch(pattern, options)
+}
+
+const LogicalOperator = {
+  AND: '$and',
+  OR: '$or'
+};
+
+const isExpression = (query) =>
+  !!(query[LogicalOperator.AND] || query[LogicalOperator.OR]);
+
+const isLeaf = (query) =>
+  !isArray(query) && isObject(query) && !isExpression(query);
+
+const convertToExplicit = (query) => ({
+  [LogicalOperator.AND]: Object.keys(query).map((key) => ({
+    [key]: query[key]
+  }))
+});
+
+// When `auto` is `true`, the parse function will infer and initialize and add
+// the appropriate `Searcher` instance
+function parse(query, options, { auto = true } = {}) {
+  const next = (query) => {
+    let keys = Object.keys(query);
+
+    if (keys.length > 1 && !isExpression(query)) {
+      return next(convertToExplicit(query))
+    }
+
+    let key = keys[0];
+
+    if (isLeaf(query)) {
+      const pattern = query[key];
+
+      if (!isString(pattern)) {
+        throw new Error(LOGICAL_SEARCH_INVALID_QUERY_FOR_KEY(key))
+      }
+
+      const obj = {
+        key,
+        pattern
+      };
+
+      if (auto) {
+        obj.searcher = createSearcher(pattern, options);
+      }
+
+      return obj
+    }
+
+    let node = {
+      children: [],
+      operator: key
+    };
+
+    keys.forEach((key) => {
+      const value = query[key];
+
+      if (isArray(value)) {
+        value.forEach((item) => {
+          node.children.push(next(item));
+        });
+      }
+    });
+
+    return node
+  };
+
+  if (!isExpression(query)) {
+    query = convertToExplicit(query);
   }
 
-  _processKeys(keys) {
-    this._keyStore = new KeyStore(keys);
+  return next(query)
+}
+
+class Fuse {
+  constructor(docs, options = {}, index) {
+    this.options = { ...Config, ...options };
+
+    if (
+      this.options.useExtendedSearch &&
+      !false
+    ) {
+      throw new Error(EXTENDED_SEARCH_UNAVAILABLE)
+    }
+
+    this._keyStore = new KeyStore(this.options.keys);
+
+    this.setCollection(docs, index);
   }
 
-  _createIndex() {
-    return createIndex(this._keyStore.keys(), this.list, {
-      getFn: this.options.getFn
+  setCollection(docs, index) {
+    this._docs = docs;
+
+    if (index && !(index instanceof FuseIndex)) {
+      throw new Error(INCORRECT_INDEX_TYPE)
+    }
+
+    this._myIndex =
+      index ||
+      createIndex(this._keyStore.keys(), this._docs, {
+        getFn: this.options.getFn
+      });
+  }
+
+  add(doc) {
+    if (!isDefined(doc)) {
+      return
+    }
+
+    this._docs.push(doc);
+    this._myIndex.add(doc);
+  }
+
+  removeAt(idx) {
+    this._docs.splice(idx, 1);
+    this._myIndex.removeAt(idx);
+  }
+
+  getIndex() {
+    return this._myIndex
+  }
+
+  search(query, { limit = -1 } = {}) {
+    const { includeMatches, includeScore, shouldSort, sortFn } = this.options;
+
+    let results = isString(query)
+      ? isString(this._docs[0])
+        ? this._searchStringList(query)
+        : this._searchObjectList(query)
+      : this._searchLogical(query);
+
+    computeScore$1(results, this._keyStore);
+
+    if (shouldSort) {
+      results.sort(sortFn);
+    }
+
+    if (isNumber(limit) && limit > -1) {
+      results = results.slice(0, limit);
+    }
+
+    return format(results, this._docs, {
+      includeMatches,
+      includeScore
     })
   }
 
-  search(pattern, opts = { limit: false }) {
-    const { shouldSort } = this.options;
-
-    let searcher = null;
-
-    for (let i = 0, len = registeredSearchers.length; i < len; i += 1) {
-      let searcherClass = registeredSearchers[i];
-      if (searcherClass.condition(pattern, this.options)) {
-        searcher = new searcherClass(pattern, this.options);
-        break
-      }
-    }
-
-    if (!searcher) {
-      searcher = new BitapSearch(pattern, this.options);
-    }
-
-    let results = this._searchUsing(searcher);
-
-    this._computeScore(results);
-
-    if (shouldSort) {
-      this._sort(results);
-    }
-
-    if (opts.limit && isNumber(opts.limit)) {
-      results = results.slice(0, opts.limit);
-    }
-
-    return this._format(results)
-  }
-
-  _searchUsing(searcher) {
-    const list = this._indexedList;
+  _searchStringList(query) {
+    const searcher = createSearcher(query, this.options);
+    const { records } = this._myIndex;
     const results = [];
-    const { includeMatches } = this.options;
 
-    // List is Array<String>
-    if (this.listIsStringArray) {
-      // Iterate over every string in the list
-      for (let i = 0, len = list.length; i < len; i += 1) {
-        let value = list[i];
-        let { $: text, idx } = value;
+    // Iterate over every string in the index
+    records.forEach(({ v: text, i: idx, n: norm }) => {
+      if (!isDefined(text)) {
+        return
+      }
 
-        if (!isDefined(text)) {
-          continue
-        }
+      const { isMatch, score, indices } = searcher.searchIn(text);
 
-        let searchResult = searcher.searchIn(value);
-
-        const { isMatch, score } = searchResult;
-
-        if (!isMatch) {
-          continue
-        }
-
-        let match = { score, value: text };
-
-        if (includeMatches) {
-          match.indices = searchResult.matchedIndices;
-        }
-
+      if (isMatch) {
         results.push({
           item: text,
           idx,
-          matches: [match]
+          matches: [{ score, value: text, norm, indices }]
         });
       }
-    } else {
-      // List is Array<Object>
-      const keyNames = this._keyStore.keys();
-      const keysLen = this._keyStore.count();
-
-      for (let i = 0, len = list.length; i < len; i += 1) {
-        let { $: item, idx } = list[i];
-
-        if (!isDefined(item)) {
-          continue
-        }
-
-        let matches = [];
-
-        // Iterate over every key (i.e, path), and fetch the value at that key
-        for (let j = 0; j < keysLen; j += 1) {
-          let key = keyNames[j];
-          let value = item[key];
-
-          if (!isDefined(value)) {
-            continue
-          }
-
-          if (isArray(value)) {
-            for (let k = 0, len = value.length; k < len; k += 1) {
-              let arrItem = value[k];
-              let text = arrItem.$;
-              let idx = arrItem.idx;
-
-              if (!isDefined(text)) {
-                continue
-              }
-
-              let searchResult = searcher.searchIn(arrItem);
-
-              const { isMatch, score } = searchResult;
-
-              if (!isMatch) {
-                continue
-              }
-
-              let match = { score, key, value: text, idx };
-
-              if (includeMatches) {
-                match.indices = searchResult.matchedIndices;
-              }
-
-              matches.push(match);
-            }
-          } else {
-            let text = value.$;
-            let searchResult = searcher.searchIn(value);
-
-            const { isMatch, score } = searchResult;
-
-            if (!isMatch) {
-              continue
-            }
-
-            let match = { score, key, value: text };
-
-            if (includeMatches) {
-              match.indices = searchResult.matchedIndices;
-            }
-
-            matches.push(match);
-          }
-        }
-
-        if (matches.length) {
-          results.push({
-            idx,
-            item,
-            matches
-          });
-        }
-      }
-    }
+    });
 
     return results
   }
 
-  _computeScore(results) {
-    for (let i = 0, len = results.length; i < len; i += 1) {
-      const result = results[i];
-      const matches = result.matches;
-      const scoreLen = matches.length;
-
-      let totalWeightedScore = 1;
-
-      for (let j = 0; j < scoreLen; j += 1) {
-        const item = matches[j];
-        const key = item.key;
-        const keyWeight = this._keyStore.get(key, 'weight');
-        const weight = keyWeight > -1 ? keyWeight : 1;
-        const score =
-          item.score === 0 && keyWeight > -1 ? Number.EPSILON : item.score;
-
-        totalWeightedScore *= Math.pow(score, weight);
-      }
-
-      result.score = totalWeightedScore;
+  _searchLogical(query) {
+    {
+      throw new Error(LOGICAL_SEARCH_UNAVAILABLE)
     }
   }
 
-  _sort(results) {
-    results.sort(this.options.sortFn);
+  _searchObjectList(query) {
+    const searcher = createSearcher(query, this.options);
+    const { keys, records } = this._myIndex;
+    const results = [];
+
+    // List is Array<Object>
+    records.forEach(({ $: item, i: idx }) => {
+      if (!isDefined(item)) {
+        return
+      }
+
+      let matches = [];
+
+      // Iterate over every key (i.e, path), and fetch the value at that key
+      keys.forEach((key, keyIndex) => {
+        matches.push(
+          ...this._findMatches({
+            key,
+            value: item[keyIndex],
+            searcher
+          })
+        );
+      });
+
+      if (matches.length) {
+        results.push({
+          idx,
+          item,
+          matches
+        });
+      }
+    });
+
+    return results
   }
+  _findMatches({ key, value, searcher }) {
+    if (!isDefined(value)) {
+      return []
+    }
 
-  _format(results) {
-    const finalOutput = [];
+    let matches = [];
 
-    const { includeMatches, includeScore } = this.options;
-
-    let transformers = [];
-
-    if (includeMatches) transformers.push(transformMatches);
-    if (includeScore) transformers.push(transformScore);
-
-    for (let i = 0, len = results.length; i < len; i += 1) {
-      const result = results[i];
-      const { idx } = result;
-
-      const data = {
-        item: this.list[idx],
-        refIndex: idx
-      };
-
-      if (transformers.length) {
-        for (let j = 0, len = transformers.length; j < len; j += 1) {
-          transformers[j](result, data);
+    if (isArray(value)) {
+      value.forEach(({ v: text, i: idx, n: norm }) => {
+        if (!isDefined(text)) {
+          return
         }
-      }
 
-      finalOutput.push(data);
+        const { isMatch, score, indices } = searcher.searchIn(text);
+
+        if (isMatch) {
+          matches.push({
+            score,
+            key,
+            value: text,
+            idx,
+            norm,
+            indices
+          });
+        }
+      });
+    } else {
+      const { v: text, n: norm } = value;
+
+      const { isMatch, score, indices } = searcher.searchIn(text);
+
+      if (isMatch) {
+        matches.push({ score, key, value: text, norm, indices });
+      }
     }
 
-    return finalOutput
+    return matches
   }
 }
 
-Fuse.version = '5.2.0-alpha.0';
+// Practical scoring function
+function computeScore$1(results, keyStore) {
+  results.forEach((result) => {
+    let totalScore = 1;
+
+    result.matches.forEach(({ key, norm, score }) => {
+      const weight = keyStore.get(key, 'weight');
+
+      totalScore *= Math.pow(
+        score === 0 && weight ? Number.EPSILON : score,
+        (weight || 1) * norm
+      );
+    });
+
+    result.score = totalScore;
+  });
+}
+
+function format(
+  results,
+  docs,
+  {
+    includeMatches = Config.includeMatches,
+    includeScore = Config.includeScore
+  } = {}
+) {
+  const transformers = [];
+
+  if (includeMatches) transformers.push(transformMatches);
+  if (includeScore) transformers.push(transformScore);
+
+  return results.map((result) => {
+    const { idx } = result;
+
+    const data = {
+      item: docs[idx],
+      refIndex: idx
+    };
+
+    if (transformers.length) {
+      transformers.forEach((transformer) => {
+        transformer(result, data);
+      });
+    }
+
+    return data
+  })
+}
+
+Fuse.version = '6.0.0';
 Fuse.createIndex = createIndex;
+Fuse.parseIndex = parseIndex;
 Fuse.config = Config;
+
+{
+  Fuse.parseQuery = parse;
+}
 
 export default Fuse;

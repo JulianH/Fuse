@@ -1,25 +1,8 @@
 const Fuse = require('../dist/fuse')
-const { get } = require('../src/helpers/get')
-
-const verbose = false
+import * as ErrorMsg from '../src/core/errorMessages'
 
 const defaultList = ['Apple', 'Orange', 'Banana']
-const defaultOptions = {
-  location: 0,
-  distance: 100,
-  threshold: 0.6,
-  isCaseSensitive: false,
-  findAllMatches: false,
-  minMatchCharLength: 1,
-  id: null,
-  keys: [],
-  shouldSort: true,
-  getFn: get,
-  sortFn: (a, b) => a.score - b.score,
-  includeMatches: false,
-  includeScore: false,
-  verbose
-}
+const defaultOptions = {}
 
 const setup = (itemList, overwriteOptions) => {
   const list = itemList || defaultList
@@ -31,10 +14,6 @@ const setup = (itemList, overwriteOptions) => {
 describe('Flat list of strings: ["Apple", "Orange", "Banana"]', () => {
   let fuse
   beforeEach(() => (fuse = setup()))
-
-  it('should have the list property', () => {
-    expect(fuse.list).toBe(defaultList)
-  })
 
   describe('When searching for the term "Apple"', () => {
     let result
@@ -234,37 +213,6 @@ describe('Include score in result list: ["Apple", "Orange", "Banana"]', () => {
     })
   })
 })
-
-// // describe('Only include ID in result list, with "ISBN"', () => {
-// //   const customBookList = [{
-// //     ISBN: '0765348276',
-// //     title: "Old Man's War",
-// //     author: 'John Scalzi'
-// //   }, {
-// //     ISBN: '0312696957',
-// //     title: 'The Lock Artist',
-// //     author: 'Steve Hamilton'
-// //   }]
-// //   const customOptions = {
-// //     keys: ['title', 'author'],
-// //     id: 'ISBN'
-// //   }
-// //   let fuse
-// //   beforeEach(() => fuse = setup(customBookList, customOptions))
-
-// //   describe('When searching for the term "Stve"', () => {
-// //     let result
-// //     beforeEach(() => result = fuse.search('Stve'))
-
-// //     test('we get a list containing exactly 1 item', () => {
-// //       expect(result).toHaveLength(1)
-// //     })
-
-// //     test('whose value is the ISBN of the book', () => {
-// //       expect(result[0].item.ISBN).toBe('0312696957')
-// //     })
-// //   })
-// // })
 
 describe('Include both ID and score in results list', () => {
   const customBookList = [
@@ -503,6 +451,23 @@ describe('Weighted search', () => {
     }
   ]
 
+  test('Invalid key entries throw errors', () => {
+    expect(() => {
+      setup(customBookList, {
+        keys: [
+          { name: 'title', weight: -10 },
+          { name: 'author', weight: 0.7 }
+        ]
+      })
+    }).toThrowError(ErrorMsg.INVALID_KEY_WEIGHT_VALUE('title'))
+
+    expect(() => {
+      setup(customBookList, {
+        keys: [{ weight: 10 }, { name: 'author', weight: 0.7 }]
+      })
+    }).toThrowError(ErrorMsg.MISSING_KEY_PROPERTY('name'))
+  })
+
   describe('When searching for the term "John Smith" with author weighted higher', () => {
     const customOptions = {
       keys: [
@@ -526,6 +491,38 @@ describe('Weighted search', () => {
         },
         refIndex: 2
       })
+    })
+  })
+
+  describe('When searching for the term "John Smith" with author weighted higher, with mixed key types', () => {
+    const customOptions = {
+      keys: ['title', { name: 'author', weight: 2 }]
+    }
+
+    let fuse
+    let result
+    beforeEach(() => {
+      fuse = setup(customBookList, customOptions)
+      return (result = fuse.search('John Smith'))
+    })
+
+    test('We get the the exactly matching object', () => {
+      expect(result[0]).toMatchObject({
+        item: {
+          title: 'The life of Jane',
+          author: 'John Smith',
+          tags: ['john', 'smith']
+        },
+        refIndex: 2
+      })
+    })
+
+    test('Throws when key does not have a name property', () => {
+      expect(() => {
+        new Fuse(customBookList, {
+          keys: ['title', { weight: 2 }]
+        })
+      }).toThrow()
     })
   })
 
@@ -622,7 +619,7 @@ describe('Weighted search', () => {
       return (result = fuse.search('War'))
     })
 
-    test('We get the the exactly matching object', () => {
+    test('We get the exactly matching object', () => {
       expect(result[0]).toMatchObject({
         item: {
           title: "Old Man's War fiction",
@@ -766,7 +763,7 @@ describe('Searching with minCharLength and pattern larger than machine word size
         findAllMatches: true,
         includeScore: true,
         minMatchCharLength: 20,
-        threshold: 0.8,
+        threshold: 0.6,
         distance: 30
       }))
   )
@@ -774,12 +771,11 @@ describe('Searching with minCharLength and pattern larger than machine word size
   describe('When searching for the term "American as apple pie is odd treatment of something made by mom"', () => {
     let result
 
-    beforeEach(
-      () =>
-        (result = fuse.search(
-          'American as apple pie is odd treatment of something made by mom'
-        ))
-    )
+    beforeEach(() => {
+      result = fuse.search(
+        'American as apple pie is odd treatment of something made by mom'
+      )
+    })
 
     test('We get exactly 1 result', () => {
       expect(result).toHaveLength(1)
@@ -787,7 +783,7 @@ describe('Searching with minCharLength and pattern larger than machine word size
 
     test('Which corresponds to the first item in the list, with no matches', () => {
       expect(result[0].refIndex).toBe(0)
-      expect(result[0].matches).toHaveLength(0)
+      expect(result[0].matches).toHaveLength(1)
     })
   })
 })
@@ -826,32 +822,6 @@ describe('Sorted search results', () => {
   })
 })
 
-describe('Searching through a deeply nested object', () => {
-  const customList = {}
-  const customOptions = {
-    includeMatches: true,
-    minMatchCharLength: 2
-  }
-  let fuse
-
-  customList.o = customList
-
-  beforeEach(() => (fuse = new Fuse(customList, customOptions)))
-
-  describe('When working with a deeply nested JSON data structure', () => {
-    let resultThunk
-    beforeEach(() => {
-      resultThunk = jest.fn(() => fuse._format(fuse))
-      resultThunk()
-    })
-
-    test('we should get no JSON circular', () => {
-      expect(resultThunk).toHaveBeenCalledTimes(1)
-      expect(resultThunk).not.toThrow()
-    })
-  })
-})
-
 describe('Searching using string large strings', () => {
   const list = [
     {
@@ -878,5 +848,45 @@ describe('Searching using string large strings', () => {
     let result = fuse.search(pattern)
     expect(result.length).toBe(1)
     expect(result[0].item.text).toBe(list[2].text)
+  })
+})
+
+describe('Searching taking into account field length', () => {
+  const list = [
+    {
+      ISBN: '0312696957',
+      title: 'The Lock war Artist nonficon',
+      author: 'Steve Hamilton',
+      tags: ['fiction war hello no way']
+    },
+    {
+      ISBN: '0765348276',
+      title: "Old Man's War",
+      author: 'John Scalzi',
+      tags: ['fiction no']
+    }
+  ]
+
+  test('The entry with the shorter field length appears first', () => {
+    const fuse = new Fuse(list, {
+      keys: ['title']
+    })
+    let result = fuse.search('war')
+    expect(result.length).toBe(2)
+    expect(result[0].item.ISBN).toBe('0765348276')
+    expect(result[1].item.ISBN).toBe('0312696957')
+  })
+
+  test('Weighted entries still are given high precedence', () => {
+    const fuse = new Fuse(list, {
+      keys: [
+        { name: 'tags', weight: 0.8 },
+        { name: 'title', weight: 0.2 }
+      ]
+    })
+    let result = fuse.search('war')
+    expect(result.length).toBe(2)
+    expect(result[0].item.ISBN).toBe('0312696957')
+    expect(result[1].item.ISBN).toBe('0765348276')
   })
 })

@@ -1,4 +1,9 @@
-# Fuse.createIndex <Badge text="New" type="tip"/>
+---
+tags:
+  - indexing
+---
+
+# Indexing
 
 Use `Fuse.createIndex` to pre-generate the index from the list, and pass it directly into the Fuse instance.
 

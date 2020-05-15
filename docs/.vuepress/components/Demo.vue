@@ -72,18 +72,16 @@ import 'codemirror/lib/codemirror.css'
 import 'codemirror/mode/javascript/javascript.js'
 import 'codemirror/theme/monokai.css'
 
-const code = (pattern) => {
+let keys = []
+for (const key in Fuse.config) {
+  if (typeof Fuse.config[key] != 'function' && key !== 'keys') {
+    keys.push(key)
+  }
+}
+
+let codify = (pattern) => {
   return `const options = {
-  isCaseSensitive: ${Fuse.config.isCaseSensitive},
-  findAllMatches: ${Fuse.config.findAllMatches},
-  includeMatches: ${Fuse.config.includeMatches},
-  includeScore: ${Fuse.config.includeScore},
-  useExtendedSearch: ${Fuse.config.useExtendedSearch},
-  minMatchCharLength: ${Fuse.config.minMatchCharLength},
-  shouldSort: ${Fuse.config.shouldSort},
-  threshold:${Fuse.config.threshold},
-  location: ${Fuse.config.location},
-  distance: ${Fuse.config.distance},
+${keys.map((key) => `  // ${key}: ${Fuse.config[key]},`).join('\n')}
   keys: [
     "title",
     "author.firstName"
@@ -119,7 +117,7 @@ export default {
   data: () => ({
     listJSON: JSON.stringify(Books, null, 2),
     list: Books,
-    code: code(''),
+    code: codify(''),
     result: '',
     outputHtml: '',
     count: 0,
@@ -170,13 +168,10 @@ export default {
     },
     parse() {
       try {
-        const func = () => {
-          let body = `(Fuse, list) => {${this.code}}`
-          return eval(body)(DemoFuse, this.list)
-        }
+        let func = eval(`[function (Fuse, list){${this.code}}][0]`)
+
         let start = new Date().getTime()
-        // this.result = func()
-        const { pattern, results } = func()
+        const { pattern, results } = func(DemoFuse, this.list)
         this.result = results
         this.pattern = pattern
         let end = new Date().getTime()
@@ -203,7 +198,7 @@ export default {
       this.outputHtml = html
     },
     onPatternKeyUp() {
-      this.code = code(this.pattern)
+      this.code = codify(this.pattern)
     }
   },
   mounted() {

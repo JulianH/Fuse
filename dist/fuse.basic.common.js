@@ -1,5 +1,5 @@
 /**
- * Fuse.js v5.2.0-alpha.0 - Lightweight fuzzy-search (http://fusejs.io)
+ * Fuse.js v6.0.0 - Lightweight fuzzy-search (http://fusejs.io)
  *
  * Copyright (c) 2020 Kiro Risk (http://kiro.me)
  * All Rights Reserved. Apache Software License 2.0
@@ -8,6 +8,22 @@
  */
 
 'use strict';
+
+function _typeof(obj) {
+  "@babel/helpers - typeof";
+
+  if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
+    _typeof = function (obj) {
+      return typeof obj;
+    };
+  } else {
+    _typeof = function (obj) {
+      return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
+    };
+  }
+
+  return _typeof(obj);
+}
 
 function _classCallCheck(instance, Constructor) {
   if (!(instance instanceof Constructor)) {
@@ -80,65 +96,46 @@ function _objectSpread2(target) {
   return target;
 }
 
-function bitapScore(pattern, _ref) {
-  var _ref$errors = _ref.errors,
-      errors = _ref$errors === void 0 ? 0 : _ref$errors,
-      _ref$currentLocation = _ref.currentLocation,
-      currentLocation = _ref$currentLocation === void 0 ? 0 : _ref$currentLocation,
-      _ref$expectedLocation = _ref.expectedLocation,
-      expectedLocation = _ref$expectedLocation === void 0 ? 0 : _ref$expectedLocation,
-      _ref$distance = _ref.distance,
-      distance = _ref$distance === void 0 ? 100 : _ref$distance;
-  var accuracy = errors / pattern.length;
-  var proximity = Math.abs(expectedLocation - currentLocation);
-
-  if (!distance) {
-    // Dodge divide by zero error.
-    return proximity ? 1.0 : accuracy;
-  }
-
-  return accuracy + proximity / distance;
+function _toConsumableArray(arr) {
+  return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableSpread();
 }
 
-function matchedIndiced() {
-  var matchmask = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
-  var minMatchCharLength = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 1;
-  var matchedIndices = [];
-  var start = -1;
-  var end = -1;
-  var i = 0;
-
-  for (var len = matchmask.length; i < len; i += 1) {
-    var match = matchmask[i];
-
-    if (match && start === -1) {
-      start = i;
-    } else if (!match && start !== -1) {
-      end = i - 1;
-
-      if (end - start + 1 >= minMatchCharLength) {
-        matchedIndices.push([start, end]);
-      }
-
-      start = -1;
-    }
-  } // (i-1 - start) + 1 => i - start
-
-
-  if (matchmask[i - 1] && i - start >= minMatchCharLength) {
-    matchedIndices.push([start, i - 1]);
-  }
-
-  return matchedIndices;
+function _arrayWithoutHoles(arr) {
+  if (Array.isArray(arr)) return _arrayLikeToArray(arr);
 }
 
-var INFINITY = 1 / 0;
-var isArray = function isArray(value) {
+function _iterableToArray(iter) {
+  if (typeof Symbol !== "undefined" && Symbol.iterator in Object(iter)) return Array.from(iter);
+}
+
+function _unsupportedIterableToArray(o, minLen) {
+  if (!o) return;
+  if (typeof o === "string") return _arrayLikeToArray(o, minLen);
+  var n = Object.prototype.toString.call(o).slice(8, -1);
+  if (n === "Object" && o.constructor) n = o.constructor.name;
+  if (n === "Map" || n === "Set") return Array.from(n);
+  if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
+}
+
+function _arrayLikeToArray(arr, len) {
+  if (len == null || len > arr.length) len = arr.length;
+
+  for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i];
+
+  return arr2;
+}
+
+function _nonIterableSpread() {
+  throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+}
+
+function isArray(value) {
   return !Array.isArray ? Object.prototype.toString.call(value) === '[object Array]' : Array.isArray(value);
-}; // Adapted from:
+} // Adapted from:
 // https://github.com/lodash/lodash/blob/f4ca396a796435422bd4fd41fadbd225edddf175/.internal/baseToString.js
 
-var baseToString = function baseToString(value) {
+var INFINITY = 1 / 0;
+function baseToString(value) {
   // Exit early for strings to avoid a performance hit in some environments.
   if (typeof value == 'string') {
     return value;
@@ -146,27 +143,115 @@ var baseToString = function baseToString(value) {
 
   var result = value + '';
   return result == '0' && 1 / value == -INFINITY ? '-0' : result;
-};
-var toString = function toString(value) {
+}
+function toString(value) {
   return value == null ? '' : baseToString(value);
-};
-var isString = function isString(value) {
+}
+function isString(value) {
   return typeof value === 'string';
-};
-var isNumber = function isNumber(value) {
+}
+function isNumber(value) {
   return typeof value === 'number';
-};
-var isDefined = function isDefined(value) {
+}
+function isObject(value) {
+  return _typeof(value) === 'object';
+}
+function isDefined(value) {
   return value !== undefined && value !== null;
+}
+function isBlank(value) {
+  return !value.trim().length;
+}
+
+var EXTENDED_SEARCH_UNAVAILABLE = 'Extended search is not available';
+var LOGICAL_SEARCH_UNAVAILABLE = 'Logical search is not available';
+var INCORRECT_INDEX_TYPE = "Incorrect 'index' type";
+var LOGICAL_SEARCH_INVALID_QUERY_FOR_KEY = function LOGICAL_SEARCH_INVALID_QUERY_FOR_KEY(key) {
+  return "Invalid value for key ".concat(key);
 };
+var PATTERN_LENGTH_TOO_LARGE = function PATTERN_LENGTH_TOO_LARGE(max) {
+  return "Pattern length exceeds max of ".concat(max, ".");
+};
+var MISSING_KEY_PROPERTY = function MISSING_KEY_PROPERTY(name) {
+  return "Missing ".concat(name, " property in key");
+};
+var INVALID_KEY_WEIGHT_VALUE = function INVALID_KEY_WEIGHT_VALUE(key) {
+  return "Property 'weight' in key '".concat(key, "' must be a positive integer");
+};
+
+var hasOwn = Object.prototype.hasOwnProperty;
+
+var KeyStore = /*#__PURE__*/function () {
+  function KeyStore(keys) {
+    var _this = this;
+
+    _classCallCheck(this, KeyStore);
+
+    this._keys = {};
+    this._keyNames = [];
+    var totalWeight = 0;
+    keys.forEach(function (key) {
+      var keyName;
+      var weight = 1;
+
+      if (isString(key)) {
+        keyName = key;
+      } else {
+        if (!hasOwn.call(key, 'name')) {
+          throw new Error(MISSING_KEY_PROPERTY('name'));
+        }
+
+        keyName = key.name;
+
+        if (hasOwn.call(key, 'weight')) {
+          weight = key.weight;
+
+          if (weight <= 0) {
+            throw new Error(INVALID_KEY_WEIGHT_VALUE(keyName));
+          }
+        }
+      }
+
+      _this._keyNames.push(keyName);
+
+      _this._keys[keyName] = {
+        weight: weight
+      };
+      totalWeight += weight;
+    }); // Normalize weights so that their sum is equal to 1
+
+    this._keyNames.forEach(function (key) {
+      _this._keys[key].weight /= totalWeight;
+    });
+  }
+
+  _createClass(KeyStore, [{
+    key: "get",
+    value: function get(key, name) {
+      return this._keys[key] && this._keys[key][name];
+    }
+  }, {
+    key: "keys",
+    value: function keys() {
+      return this._keyNames;
+    }
+  }, {
+    key: "toJSON",
+    value: function toJSON() {
+      return JSON.stringify(this._keys);
+    }
+  }]);
+
+  return KeyStore;
+}();
 
 function get(obj, path) {
   var list = [];
   var arr = false;
 
-  var _get = function _get(obj, path) {
+  var deepGet = function deepGet(obj, path) {
     if (!path) {
-      // If there's no path left, we've gotten to the object we care about.
+      // If there's no path left, we've arrived at the object we care about.
       list.push(obj);
     } else {
       var dotIndex = path.indexOf('.');
@@ -180,30 +265,27 @@ function get(obj, path) {
 
       var value = obj[key];
 
-      if (isDefined(value)) {
-        if (!remaining && (isString(value) || isNumber(value))) {
-          list.push(toString(value));
-        } else if (isArray(value)) {
-          arr = true; // Search each item in the array.
+      if (!isDefined(value)) {
+        return;
+      }
 
-          for (var i = 0, len = value.length; i < len; i += 1) {
-            _get(value[i], remaining);
-          }
-        } else if (remaining) {
-          // An object. Recurse further.
-          _get(value, remaining);
+      if (!remaining && (isString(value) || isNumber(value))) {
+        list.push(toString(value));
+      } else if (isArray(value)) {
+        arr = true; // Search each item in the array.
+
+        for (var i = 0, len = value.length; i < len; i += 1) {
+          deepGet(value[i], remaining);
         }
+      } else if (remaining) {
+        // An object. Recurse further.
+        deepGet(value, remaining);
       }
     }
   };
 
-  _get(obj, path);
-
-  if (arr) {
-    return list;
-  }
-
-  return list[0];
+  deepGet(obj, path);
+  return arr ? list : list[0];
 }
 
 var MatchOptions = {
@@ -227,9 +309,9 @@ var BasicOptions = {
   keys: [],
   // Whether to sort the result list, by score
   shouldSort: true,
-  // Default sort function
+  // Default sort function: sort by ascending score, ascending index
   sortFn: function sortFn(a, b) {
-    return a.score - b.score;
+    return a.score === b.score ? a.idx < b.idx ? -1 : 1 : a.score < b.score ? -1 : 1;
   }
 };
 var FuzzyOptions = {
@@ -254,7 +336,324 @@ var AdvancedOptions = {
 };
 var Config = _objectSpread2({}, BasicOptions, {}, MatchOptions, {}, FuzzyOptions, {}, AdvancedOptions);
 
-function bitapSearch(text, pattern, patternAlphabet) {
+var SPACE = /[^ ]+/g; // Field-length norm: the shorter the field, the higher the weight.
+// Set to 3 decimals to reduce index size.
+
+function norm() {
+  var mantissa = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 3;
+  var cache = new Map();
+  return {
+    get: function get(value) {
+      var numTokens = value.match(SPACE).length;
+
+      if (cache.has(numTokens)) {
+        return cache.get(numTokens);
+      }
+
+      var n = parseFloat((1 / Math.sqrt(numTokens)).toFixed(mantissa));
+      cache.set(numTokens, n);
+      return n;
+    },
+    clear: function clear() {
+      cache.clear();
+    }
+  };
+}
+
+var FuseIndex = /*#__PURE__*/function () {
+  function FuseIndex() {
+    var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+        _ref$getFn = _ref.getFn,
+        getFn = _ref$getFn === void 0 ? Config.getFn : _ref$getFn;
+
+    _classCallCheck(this, FuseIndex);
+
+    this.norm = norm(3);
+    this.getFn = getFn;
+    this.isCreated = false;
+    this.setRecords();
+  }
+
+  _createClass(FuseIndex, [{
+    key: "setCollection",
+    value: function setCollection() {
+      var docs = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
+      this.docs = docs;
+    }
+  }, {
+    key: "setRecords",
+    value: function setRecords() {
+      var records = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
+      this.records = records;
+    }
+  }, {
+    key: "setKeys",
+    value: function setKeys() {
+      var keys = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
+      this.keys = keys;
+    }
+  }, {
+    key: "create",
+    value: function create() {
+      var _this = this;
+
+      if (this.isCreated || !this.docs.length) {
+        return;
+      }
+
+      this.isCreated = true; // List is Array<String>
+
+      if (isString(this.docs[0])) {
+        this.docs.forEach(function (doc, docIndex) {
+          _this._addString(doc, docIndex);
+        });
+      } else {
+        // List is Array<Object>
+        this.docs.forEach(function (doc, docIndex) {
+          _this._addObject(doc, docIndex);
+        });
+      }
+
+      this.norm.clear();
+    } // Adds a doc to the end of the index
+
+  }, {
+    key: "add",
+    value: function add(doc) {
+      var idx = this.size();
+
+      if (isString(doc)) {
+        this._addString(doc, idx);
+      } else {
+        this._addObject(doc, idx);
+      }
+    } // Removes the doc at the specified index of the index
+
+  }, {
+    key: "removeAt",
+    value: function removeAt(idx) {
+      this.records.splice(idx, 1); // Change ref index of every subsquent doc
+
+      for (var i = idx, len = this.size(); i < len; i += 1) {
+        this.records[i].i -= 1;
+      }
+    }
+  }, {
+    key: "size",
+    value: function size() {
+      return this.records.length;
+    }
+  }, {
+    key: "_addString",
+    value: function _addString(doc, docIndex) {
+      if (!isDefined(doc) || isBlank(doc)) {
+        return;
+      }
+
+      var record = {
+        v: doc,
+        i: docIndex,
+        n: this.norm.get(doc)
+      };
+      this.records.push(record);
+    }
+  }, {
+    key: "_addObject",
+    value: function _addObject(doc, docIndex) {
+      var _this2 = this;
+
+      var record = {
+        i: docIndex,
+        $: {}
+      }; // Iterate over every key (i.e, path), and fetch the value at that key
+
+      this.keys.forEach(function (key, keyIndex) {
+        var value = _this2.getFn(doc, key);
+
+        if (!isDefined(value)) {
+          return;
+        }
+
+        if (isArray(value)) {
+          (function () {
+            var subRecords = [];
+            var stack = [{
+              nestedArrIndex: -1,
+              value: value
+            }];
+
+            while (stack.length) {
+              var _stack$pop = stack.pop(),
+                  nestedArrIndex = _stack$pop.nestedArrIndex,
+                  _value = _stack$pop.value;
+
+              if (!isDefined(_value)) {
+                continue;
+              }
+
+              if (isString(_value) && !isBlank(_value)) {
+                var subRecord = {
+                  v: _value,
+                  i: nestedArrIndex,
+                  n: _this2.norm.get(_value)
+                };
+                subRecords.push(subRecord);
+              } else if (isArray(_value)) {
+                _value.forEach(function (item, k) {
+                  stack.push({
+                    nestedArrIndex: k,
+                    value: item
+                  });
+                });
+              }
+            }
+
+            record.$[keyIndex] = subRecords;
+          })();
+        } else if (!isBlank(value)) {
+          var subRecord = {
+            v: value,
+            n: _this2.norm.get(value)
+          };
+          record.$[keyIndex] = subRecord;
+        }
+      });
+      this.records.push(record);
+    }
+  }, {
+    key: "toJSON",
+    value: function toJSON() {
+      return {
+        keys: this.keys,
+        records: this.records
+      };
+    }
+  }]);
+
+  return FuseIndex;
+}();
+function createIndex(keys, docs) {
+  var _ref2 = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {},
+      _ref2$getFn = _ref2.getFn,
+      getFn = _ref2$getFn === void 0 ? Config.getFn : _ref2$getFn;
+
+  var myIndex = new FuseIndex({
+    getFn: getFn
+  });
+  myIndex.setKeys(keys);
+  myIndex.setCollection(docs);
+  myIndex.create();
+  return myIndex;
+}
+function parseIndex(data) {
+  var _ref3 = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},
+      _ref3$getFn = _ref3.getFn,
+      getFn = _ref3$getFn === void 0 ? Config.getFn : _ref3$getFn;
+
+  var keys = data.keys,
+      records = data.records;
+  var myIndex = new FuseIndex({
+    getFn: getFn
+  });
+  myIndex.setKeys(keys);
+  myIndex.setRecords(records);
+  return myIndex;
+}
+
+function transformMatches(result, data) {
+  var matches = result.matches;
+  data.matches = [];
+
+  if (!isDefined(matches)) {
+    return;
+  }
+
+  matches.forEach(function (match) {
+    if (!isDefined(match.indices) || !match.indices.length) {
+      return;
+    }
+
+    var indices = match.indices,
+        value = match.value;
+    var obj = {
+      indices: indices,
+      value: value
+    };
+
+    if (match.key) {
+      obj.key = match.key;
+    }
+
+    if (match.idx > -1) {
+      obj.refIndex = match.idx;
+    }
+
+    data.matches.push(obj);
+  });
+}
+
+function transformScore(result, data) {
+  data.score = result.score;
+}
+
+function computeScore(pattern) {
+  var _ref = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},
+      _ref$errors = _ref.errors,
+      errors = _ref$errors === void 0 ? 0 : _ref$errors,
+      _ref$currentLocation = _ref.currentLocation,
+      currentLocation = _ref$currentLocation === void 0 ? 0 : _ref$currentLocation,
+      _ref$expectedLocation = _ref.expectedLocation,
+      expectedLocation = _ref$expectedLocation === void 0 ? 0 : _ref$expectedLocation,
+      _ref$distance = _ref.distance,
+      distance = _ref$distance === void 0 ? Config.distance : _ref$distance;
+
+  var accuracy = errors / pattern.length;
+  var proximity = Math.abs(expectedLocation - currentLocation);
+
+  if (!distance) {
+    // Dodge divide by zero error.
+    return proximity ? 1.0 : accuracy;
+  }
+
+  return accuracy + proximity / distance;
+}
+
+function convertMaskToIndices() {
+  var matchmask = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
+  var minMatchCharLength = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : Config.minMatchCharLength;
+  var indices = [];
+  var start = -1;
+  var end = -1;
+  var i = 0;
+
+  for (var len = matchmask.length; i < len; i += 1) {
+    var match = matchmask[i];
+
+    if (match && start === -1) {
+      start = i;
+    } else if (!match && start !== -1) {
+      end = i - 1;
+
+      if (end - start + 1 >= minMatchCharLength) {
+        indices.push([start, end]);
+      }
+
+      start = -1;
+    }
+  } // (i-1 - start) + 1 => i - start
+
+
+  if (matchmask[i - 1] && i - start >= minMatchCharLength) {
+    indices.push([start, i - 1]);
+  }
+
+  return indices;
+}
+
+// Machine word size
+var MAX_BITS = 32;
+
+function search(text, pattern, patternAlphabet) {
   var _ref = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {},
       _ref$location = _ref.location,
       location = _ref$location === void 0 ? Config.location : _ref$location,
@@ -269,6 +668,10 @@ function bitapSearch(text, pattern, patternAlphabet) {
       _ref$includeMatches = _ref.includeMatches,
       includeMatches = _ref$includeMatches === void 0 ? Config.includeMatches : _ref$includeMatches;
 
+  if (pattern.length > MAX_BITS) {
+    throw new Error(PATTERN_LENGTH_TOO_LARGE(MAX_BITS));
+  }
+
   var patternLen = pattern.length; // Set starting location at beginning text and initialize the alphabet.
 
   var textLen = text.length; // Handle the case when location > text.length
@@ -277,34 +680,34 @@ function bitapSearch(text, pattern, patternAlphabet) {
 
   var currentThreshold = threshold; // Is there a nearby exact match? (speedup)
 
-  var bestLocation = text.indexOf(pattern, expectedLocation); // a mask of the matches
+  var bestLocation = expectedLocation; // A mask of the matches, used for building the indices
 
   var matchMask = [];
 
-  for (var i = 0; i < textLen; i += 1) {
-    matchMask[i] = 0;
+  if (includeMatches) {
+    for (var i = 0; i < textLen; i += 1) {
+      matchMask[i] = 0;
+    }
   }
 
-  if (bestLocation !== -1) {
-    var score = bitapScore(pattern, {
-      errors: 0,
-      currentLocation: bestLocation,
+  var index; // Get all exact matches, here for speed up
+
+  while ((index = text.indexOf(pattern, bestLocation)) > -1) {
+    var score = computeScore(pattern, {
+      currentLocation: index,
       expectedLocation: expectedLocation,
       distance: distance
     });
-    currentThreshold = Math.min(score, currentThreshold); // What about in the other direction? (speed up)
+    currentThreshold = Math.min(score, currentThreshold);
+    bestLocation = index + patternLen;
 
-    bestLocation = text.lastIndexOf(pattern, expectedLocation + patternLen);
+    if (includeMatches) {
+      var _i = 0;
 
-    if (bestLocation !== -1) {
-      var _score = bitapScore(pattern, {
-        errors: 0,
-        currentLocation: bestLocation,
-        expectedLocation: expectedLocation,
-        distance: distance
-      });
-
-      currentThreshold = Math.min(_score, currentThreshold);
+      while (_i < patternLen) {
+        matchMask[index + _i] = 1;
+        _i += 1;
+      }
     }
   } // Reset the best location
 
@@ -313,9 +716,9 @@ function bitapSearch(text, pattern, patternAlphabet) {
   var lastBitArr = [];
   var finalScore = 1;
   var binMax = patternLen + textLen;
-  var mask = 1 << (patternLen <= 31 ? patternLen - 1 : 30);
+  var mask = 1 << (patternLen <= MAX_BITS - 1 ? patternLen - 1 : MAX_BITS - 2);
 
-  for (var _i = 0; _i < patternLen; _i += 1) {
+  for (var _i2 = 0; _i2 < patternLen; _i2 += 1) {
     // Scan for the best match; each iteration allows for one more error.
     // Run a binary search to determine how far from the match location we can stray
     // at this error level.
@@ -323,14 +726,14 @@ function bitapSearch(text, pattern, patternAlphabet) {
     var binMid = binMax;
 
     while (binMin < binMid) {
-      var _score3 = bitapScore(pattern, {
-        errors: _i,
+      var _score2 = computeScore(pattern, {
+        errors: _i2,
         currentLocation: expectedLocation + binMid,
         expectedLocation: expectedLocation,
         distance: distance
       });
 
-      if (_score3 <= currentThreshold) {
+      if (_score2 <= currentThreshold) {
         binMin = binMid;
       } else {
         binMax = binMid;
@@ -345,26 +748,26 @@ function bitapSearch(text, pattern, patternAlphabet) {
     var finish = findAllMatches ? textLen : Math.min(expectedLocation + binMid, textLen) + patternLen; // Initialize the bit array
 
     var bitArr = Array(finish + 2);
-    bitArr[finish + 1] = (1 << _i) - 1;
+    bitArr[finish + 1] = (1 << _i2) - 1;
 
     for (var j = finish; j >= start; j -= 1) {
       var currentLocation = j - 1;
       var charMatch = patternAlphabet[text.charAt(currentLocation)];
 
-      if (charMatch) {
+      if (charMatch && includeMatches) {
         matchMask[currentLocation] = 1;
       } // First pass: exact match
 
 
       bitArr[j] = (bitArr[j + 1] << 1 | 1) & charMatch; // Subsequent passes: fuzzy match
 
-      if (_i !== 0) {
+      if (_i2 !== 0) {
         bitArr[j] |= (lastBitArr[j + 1] | lastBitArr[j]) << 1 | 1 | lastBitArr[j + 1];
       }
 
       if (bitArr[j] & mask) {
-        finalScore = bitapScore(pattern, {
-          errors: _i,
+        finalScore = computeScore(pattern, {
+          errors: _i2,
           currentLocation: currentLocation,
           expectedLocation: expectedLocation,
           distance: distance
@@ -387,14 +790,14 @@ function bitapSearch(text, pattern, patternAlphabet) {
     } // No hope for a (better) match at greater error levels.
 
 
-    var _score2 = bitapScore(pattern, {
-      errors: _i + 1,
+    var _score = computeScore(pattern, {
+      errors: _i2 + 1,
       currentLocation: expectedLocation,
       expectedLocation: expectedLocation,
       distance: distance
     });
 
-    if (_score2 > currentThreshold) {
+    if (_score > currentThreshold) {
       break;
     }
 
@@ -404,17 +807,17 @@ function bitapSearch(text, pattern, patternAlphabet) {
   var result = {
     isMatch: bestLocation >= 0,
     // Count exact matches (those with a score of 0) to be "almost" exact
-    score: !finalScore ? 0.001 : finalScore
+    score: Math.max(0.001, finalScore)
   };
 
   if (includeMatches) {
-    result.matchedIndices = matchedIndiced(matchMask, minMatchCharLength);
+    result.indices = convertMaskToIndices(matchMask, minMatchCharLength);
   }
 
   return result;
 }
 
-function patternAlphabet(pattern) {
+function createPatternAlphabet(pattern) {
   var mask = {};
   var len = pattern.length;
 
@@ -429,36 +832,53 @@ function patternAlphabet(pattern) {
   return mask;
 }
 
-// Machine word size
-var MAX_BITS = 32;
-
 var BitapSearch = /*#__PURE__*/function () {
   function BitapSearch(pattern) {
-    var _ref, _ref$location, _ref$threshold, _ref$distance, _ref$includeMatches, _ref$findAllMatches, _ref$minMatchCharLeng, _ref$isCaseSensitive;
-
-    var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : (_ref = {}, _ref$location = _ref.location, location = _ref$location === void 0 ? Config.location : _ref$location, _ref$threshold = _ref.threshold, threshold = _ref$threshold === void 0 ? Config.threshold : _ref$threshold, _ref$distance = _ref.distance, distance = _ref$distance === void 0 ? Config.distance : _ref$distance, _ref$includeMatches = _ref.includeMatches, includeMatches = _ref$includeMatches === void 0 ? Config.includeMatches : _ref$includeMatches, _ref$findAllMatches = _ref.findAllMatches, findAllMatches = _ref$findAllMatches === void 0 ? Config.findAllMatches : _ref$findAllMatches, _ref$minMatchCharLeng = _ref.minMatchCharLength, minMatchCharLength = _ref$minMatchCharLeng === void 0 ? Config.minMatchCharLength : _ref$minMatchCharLeng, _ref$isCaseSensitive = _ref.isCaseSensitive, isCaseSensitive = _ref$isCaseSensitive === void 0 ? Config.isCaseSensitive : _ref$isCaseSensitive, _ref);
+    var _ref = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},
+        _ref$location = _ref.location,
+        location = _ref$location === void 0 ? Config.location : _ref$location,
+        _ref$threshold = _ref.threshold,
+        threshold = _ref$threshold === void 0 ? Config.threshold : _ref$threshold,
+        _ref$distance = _ref.distance,
+        distance = _ref$distance === void 0 ? Config.distance : _ref$distance,
+        _ref$includeMatches = _ref.includeMatches,
+        includeMatches = _ref$includeMatches === void 0 ? Config.includeMatches : _ref$includeMatches,
+        _ref$findAllMatches = _ref.findAllMatches,
+        findAllMatches = _ref$findAllMatches === void 0 ? Config.findAllMatches : _ref$findAllMatches,
+        _ref$minMatchCharLeng = _ref.minMatchCharLength,
+        minMatchCharLength = _ref$minMatchCharLeng === void 0 ? Config.minMatchCharLength : _ref$minMatchCharLeng,
+        _ref$isCaseSensitive = _ref.isCaseSensitive,
+        isCaseSensitive = _ref$isCaseSensitive === void 0 ? Config.isCaseSensitive : _ref$isCaseSensitive;
 
     _classCallCheck(this, BitapSearch);
 
-    this.options = options;
+    this.options = {
+      location: location,
+      threshold: threshold,
+      distance: distance,
+      includeMatches: includeMatches,
+      findAllMatches: findAllMatches,
+      minMatchCharLength: minMatchCharLength,
+      isCaseSensitive: isCaseSensitive
+    };
+    this.pattern = isCaseSensitive ? pattern : pattern.toLowerCase();
+    this.chunks = [];
+    var index = 0;
 
-    if (pattern.length > MAX_BITS) {
-      throw new Error("Pattern length exceeds max of ".concat(MAX_BITS, "."));
+    while (index < this.pattern.length) {
+      var _pattern = this.pattern.substring(index, index + MAX_BITS);
+
+      this.chunks.push({
+        pattern: _pattern,
+        alphabet: createPatternAlphabet(_pattern)
+      });
+      index += MAX_BITS;
     }
-
-    this.pattern = this.options.isCaseSensitive ? pattern : pattern.toLowerCase();
-    this.patternAlphabet = patternAlphabet(this.pattern);
   }
 
   _createClass(BitapSearch, [{
     key: "searchIn",
-    value: function searchIn(value) {
-      var text = value.$;
-      return this.searchInString(text);
-    }
-  }, {
-    key: "searchInString",
-    value: function searchInString(text) {
+    value: function searchIn(text) {
       var _this$options = this.options,
           isCaseSensitive = _this$options.isCaseSensitive,
           includeMatches = _this$options.includeMatches;
@@ -469,16 +889,16 @@ var BitapSearch = /*#__PURE__*/function () {
 
 
       if (this.pattern === text) {
-        var result = {
+        var _result = {
           isMatch: true,
           score: 0
         };
 
         if (includeMatches) {
-          result.matchedIndices = [[0, text.length - 1]];
+          _result.indices = [[0, text.length - 1]];
         }
 
-        return result;
+        return _result;
       } // Otherwise, use Bitap algorithm
 
 
@@ -488,584 +908,419 @@ var BitapSearch = /*#__PURE__*/function () {
           threshold = _this$options2.threshold,
           findAllMatches = _this$options2.findAllMatches,
           minMatchCharLength = _this$options2.minMatchCharLength;
-      return bitapSearch(text, this.pattern, this.patternAlphabet, {
-        location: location,
-        distance: distance,
-        threshold: threshold,
-        findAllMatches: findAllMatches,
-        minMatchCharLength: minMatchCharLength,
-        includeMatches: includeMatches
+      var allIndices = [];
+      var totalScore = 0;
+      var hasMatches = false;
+      this.chunks.forEach(function (_ref2, i) {
+        var pattern = _ref2.pattern,
+            alphabet = _ref2.alphabet;
+
+        var _search = search(text, pattern, alphabet, {
+          location: location + MAX_BITS * i,
+          distance: distance,
+          threshold: threshold,
+          findAllMatches: findAllMatches,
+          minMatchCharLength: minMatchCharLength,
+          includeMatches: includeMatches
+        }),
+            isMatch = _search.isMatch,
+            score = _search.score,
+            indices = _search.indices;
+
+        if (isMatch) {
+          hasMatches = true;
+        }
+
+        totalScore += score;
+
+        if (isMatch && indices) {
+          allIndices = [].concat(_toConsumableArray(allIndices), _toConsumableArray(indices));
+        }
       });
+      var result = {
+        isMatch: hasMatches,
+        score: hasMatches ? totalScore / this.chunks.length : 1
+      };
+
+      if (hasMatches && includeMatches) {
+        result.indices = allIndices;
+      }
+
+      return result;
     }
   }]);
 
   return BitapSearch;
 }();
 
-var NGRAM_LEN = 3;
-function ngram(text, _ref) {
-  var _ref$n = _ref.n,
-      n = _ref$n === void 0 ? NGRAM_LEN : _ref$n,
-      _ref$pad = _ref.pad,
-      pad = _ref$pad === void 0 ? true : _ref$pad,
-      _ref$sort = _ref.sort,
-      sort = _ref$sort === void 0 ? false : _ref$sort;
-  var nGrams = [];
-
-  if (text === null || text === undefined) {
-    return nGrams;
-  }
-
-  text = text.toLowerCase();
-
-  if (pad) {
-    text = " ".concat(text, " ");
-  }
-
-  var index = text.length - n + 1;
-
-  if (index < 1) {
-    return nGrams;
-  }
-
-  while (index--) {
-    nGrams[index] = text.substr(index, n);
-  }
-
-  if (sort) {
-    nGrams.sort(function (a, b) {
-      return a == b ? 0 : a < b ? -1 : 1;
-    });
-  }
-
-  return nGrams;
-}
-
-function createIndex(keys, list) {
-  var _ref = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {},
-      _ref$getFn = _ref.getFn,
-      getFn = _ref$getFn === void 0 ? get : _ref$getFn,
-      _ref$ngrams = _ref.ngrams,
-      ngrams = _ref$ngrams === void 0 ? false : _ref$ngrams;
-
-  var indexedList = []; // List is Array<String>
-
-  if (isString(list[0])) {
-    // Iterate over every string in the list
-    for (var i = 0, len = list.length; i < len; i += 1) {
-      var value = list[i];
-
-      if (isDefined(value)) {
-        // if (!isCaseSensitive) {
-        //   value = value.toLowerCase()
-        // }
-        var record = {
-          $: value,
-          idx: i
-        };
-
-        if (ngrams) {
-          record.ng = ngram(value, {
-            sort: true
-          });
-        }
-
-        indexedList.push(record);
-      }
-    }
-  } else {
-    // List is Array<Object>
-    var keysLen = keys.length;
-
-    for (var _i = 0, _len = list.length; _i < _len; _i += 1) {
-      var item = list[_i];
-      var _record = {
-        idx: _i,
-        $: {}
-      }; // Iterate over every key (i.e, path), and fetch the value at that key
-
-      for (var j = 0; j < keysLen; j += 1) {
-        var key = keys[j];
-
-        var _value = getFn(item, key);
-
-        if (!isDefined(_value)) {
-          continue;
-        }
-
-        if (isArray(_value)) {
-          var subRecords = [];
-          var stack = [{
-            arrayIndex: -1,
-            value: _value
-          }];
-
-          while (stack.length) {
-            var _stack$pop = stack.pop(),
-                arrayIndex = _stack$pop.arrayIndex,
-                _value2 = _stack$pop.value;
-
-            if (!isDefined(_value2)) {
-              continue;
-            }
-
-            if (isString(_value2)) {
-              // if (!isCaseSensitive) {
-              //   v = v.toLowerCase()
-              // }
-              var subRecord = {
-                $: _value2,
-                idx: arrayIndex
-              };
-
-              if (ngrams) {
-                subRecord.ng = ngram(_value2, {
-                  sort: true
-                });
-              }
-
-              subRecords.push(subRecord);
-            } else if (isArray(_value2)) {
-              for (var k = 0, arrLen = _value2.length; k < arrLen; k += 1) {
-                stack.push({
-                  arrayIndex: k,
-                  value: _value2[k]
-                });
-              }
-            }
-          }
-
-          _record.$[key] = subRecords;
-        } else {
-          // if (!isCaseSensitive) {
-          //   value = value.toLowerCase()
-          // }
-          var _subRecord = {
-            $: _value
-          };
-
-          if (ngrams) {
-            _subRecord.ng = ngram(_value, {
-              sort: true
-            });
-          }
-
-          _record.$[key] = _subRecord;
-        }
-      }
-
-      indexedList.push(_record);
-    }
-  }
-
-  return indexedList;
-}
-
-var KeyStore = /*#__PURE__*/function () {
-  function KeyStore(keys) {
-    _classCallCheck(this, KeyStore);
-
-    this._keys = {};
-    this._keyNames = [];
-    this._length = keys.length; // Iterate over every key
-
-    if (keys.length && isString(keys[0])) {
-      for (var i = 0; i < this._length; i += 1) {
-        var key = keys[i];
-        this._keys[key] = {
-          weight: 1
-        };
-
-        this._keyNames.push(key);
-      }
-    } else {
-      var totalWeight = 0;
-
-      for (var _i = 0; _i < this._length; _i += 1) {
-        var _key = keys[_i];
-
-        if (!Object.prototype.hasOwnProperty.call(_key, 'name')) {
-          throw new Error('Missing "name" property in key object');
-        }
-
-        var keyName = _key.name;
-
-        this._keyNames.push(keyName);
-
-        if (!Object.prototype.hasOwnProperty.call(_key, 'weight')) {
-          throw new Error('Missing "weight" property in key object');
-        }
-
-        var weight = _key.weight;
-
-        if (weight <= 0 || weight >= 1) {
-          throw new Error('"weight" property in key must be in the range of (0, 1)');
-        }
-
-        this._keys[keyName] = {
-          weight: weight
-        };
-        totalWeight += weight;
-      } // Normalize weights so that their sum is equal to 1
-
-
-      for (var _i2 = 0; _i2 < this._length; _i2 += 1) {
-        var _keyName = this._keyNames[_i2];
-        var keyWeight = this._keys[_keyName].weight;
-        this._keys[_keyName].weight = keyWeight / totalWeight;
-      }
-    }
-  }
-
-  _createClass(KeyStore, [{
-    key: "get",
-    value: function get(key, name) {
-      return this._keys[key] ? this._keys[key][name] : -1;
-    }
-  }, {
-    key: "keys",
-    value: function keys() {
-      return this._keyNames;
-    }
-  }, {
-    key: "count",
-    value: function count() {
-      return this._length;
-    }
-  }, {
-    key: "toJSON",
-    value: function toJSON() {
-      return JSON.stringify(this._keys);
-    }
-  }]);
-
-  return KeyStore;
-}();
-
-function transformMatches(result, data) {
-  var matches = result.matches;
-  data.matches = [];
-
-  if (!isDefined(matches)) {
-    return;
-  }
-
-  for (var i = 0, len = matches.length; i < len; i += 1) {
-    var match = matches[i];
-
-    if (!isDefined(match.indices) || match.indices.length === 0) {
-      continue;
-    }
-
-    var obj = {
-      indices: match.indices,
-      value: match.value
-    };
-
-    if (match.key) {
-      obj.key = match.key;
-    }
-
-    if (match.idx > -1) {
-      obj.refIndex = match.idx;
-    }
-
-    data.matches.push(obj);
-  }
-}
-
-function transformScore(result, data) {
-  data.score = result.score;
-}
-
 var registeredSearchers = [];
+function createSearcher(pattern, options) {
+  for (var i = 0, len = registeredSearchers.length; i < len; i += 1) {
+    var searcherClass = registeredSearchers[i];
+
+    if (searcherClass.condition(pattern, options)) {
+      return new searcherClass(pattern, options);
+    }
+  }
+
+  return new BitapSearch(pattern, options);
+}
+
+var LogicalOperator = {
+  AND: '$and',
+  OR: '$or'
+};
+
+var isExpression = function isExpression(query) {
+  return !!(query[LogicalOperator.AND] || query[LogicalOperator.OR]);
+};
+
+var isLeaf = function isLeaf(query) {
+  return !isArray(query) && isObject(query) && !isExpression(query);
+};
+
+var convertToExplicit = function convertToExplicit(query) {
+  return _defineProperty({}, LogicalOperator.AND, Object.keys(query).map(function (key) {
+    return _defineProperty({}, key, query[key]);
+  }));
+}; // When `auto` is `true`, the parse function will infer and initialize and add
+// the appropriate `Searcher` instance
+
+
+function parse(query, options) {
+  var _ref3 = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {},
+      _ref3$auto = _ref3.auto,
+      auto = _ref3$auto === void 0 ? true : _ref3$auto;
+
+  var next = function next(query) {
+    var keys = Object.keys(query);
+
+    if (keys.length > 1 && !isExpression(query)) {
+      return next(convertToExplicit(query));
+    }
+
+    var key = keys[0];
+
+    if (isLeaf(query)) {
+      var pattern = query[key];
+
+      if (!isString(pattern)) {
+        throw new Error(LOGICAL_SEARCH_INVALID_QUERY_FOR_KEY(key));
+      }
+
+      var obj = {
+        key: key,
+        pattern: pattern
+      };
+
+      if (auto) {
+        obj.searcher = createSearcher(pattern, options);
+      }
+
+      return obj;
+    }
+
+    var node = {
+      children: [],
+      operator: key
+    };
+    keys.forEach(function (key) {
+      var value = query[key];
+
+      if (isArray(value)) {
+        value.forEach(function (item) {
+          node.children.push(next(item));
+        });
+      }
+    });
+    return node;
+  };
+
+  if (!isExpression(query)) {
+    query = convertToExplicit(query);
+  }
+
+  return next(query);
+}
 
 var Fuse = /*#__PURE__*/function () {
-  function Fuse(list) {
+  function Fuse(docs) {
     var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-    var index = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
+    var index = arguments.length > 2 ? arguments[2] : undefined;
 
     _classCallCheck(this, Fuse);
 
     this.options = _objectSpread2({}, Config, {}, options);
 
-    this._processKeys(this.options.keys);
+    if (this.options.useExtendedSearch && !false) {
+      throw new Error(EXTENDED_SEARCH_UNAVAILABLE);
+    }
 
-    this.setCollection(list, index);
+    this._keyStore = new KeyStore(this.options.keys);
+    this.setCollection(docs, index);
   }
 
   _createClass(Fuse, [{
     key: "setCollection",
-    value: function setCollection(list) {
-      var index = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
-      this.list = list;
-      this.listIsStringArray = isString(list[0]);
+    value: function setCollection(docs, index) {
+      this._docs = docs;
 
-      if (index) {
-        this.setIndex(index);
-      } else {
-        this.setIndex(this._createIndex());
+      if (index && !(index instanceof FuseIndex)) {
+        throw new Error(INCORRECT_INDEX_TYPE);
       }
-    }
-  }, {
-    key: "setIndex",
-    value: function setIndex(listIndex) {
-      this._indexedList = listIndex;
-    }
-  }, {
-    key: "_processKeys",
-    value: function _processKeys(keys) {
-      this._keyStore = new KeyStore(keys);
-    }
-  }, {
-    key: "_createIndex",
-    value: function _createIndex() {
-      return createIndex(this._keyStore.keys(), this.list, {
+
+      this._myIndex = index || createIndex(this._keyStore.keys(), this._docs, {
         getFn: this.options.getFn
       });
     }
   }, {
-    key: "search",
-    value: function search(pattern) {
-      var opts = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {
-        limit: false
-      };
-      var shouldSort = this.options.shouldSort;
-      var searcher = null;
-
-      for (var i = 0, len = registeredSearchers.length; i < len; i += 1) {
-        var searcherClass = registeredSearchers[i];
-
-        if (searcherClass.condition(pattern, this.options)) {
-          searcher = new searcherClass(pattern, this.options);
-          break;
-        }
+    key: "add",
+    value: function add(doc) {
+      if (!isDefined(doc)) {
+        return;
       }
 
-      if (!searcher) {
-        searcher = new BitapSearch(pattern, this.options);
-      }
+      this._docs.push(doc);
 
-      var results = this._searchUsing(searcher);
-
-      this._computeScore(results);
-
-      if (shouldSort) {
-        this._sort(results);
-      }
-
-      if (opts.limit && isNumber(opts.limit)) {
-        results = results.slice(0, opts.limit);
-      }
-
-      return this._format(results);
+      this._myIndex.add(doc);
     }
   }, {
-    key: "_searchUsing",
-    value: function _searchUsing(searcher) {
-      var list = this._indexedList;
-      var results = [];
-      var includeMatches = this.options.includeMatches; // List is Array<String>
+    key: "removeAt",
+    value: function removeAt(idx) {
+      this._docs.splice(idx, 1);
 
-      if (this.listIsStringArray) {
-        // Iterate over every string in the list
-        for (var i = 0, len = list.length; i < len; i += 1) {
-          var value = list[i];
-          var text = value.$,
-              idx = value.idx;
+      this._myIndex.removeAt(idx);
+    }
+  }, {
+    key: "getIndex",
+    value: function getIndex() {
+      return this._myIndex;
+    }
+  }, {
+    key: "search",
+    value: function search(query) {
+      var _ref = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},
+          _ref$limit = _ref.limit,
+          limit = _ref$limit === void 0 ? -1 : _ref$limit;
 
-          if (!isDefined(text)) {
-            continue;
-          }
+      var _this$options = this.options,
+          includeMatches = _this$options.includeMatches,
+          includeScore = _this$options.includeScore,
+          shouldSort = _this$options.shouldSort,
+          sortFn = _this$options.sortFn;
+      var results = isString(query) ? isString(this._docs[0]) ? this._searchStringList(query) : this._searchObjectList(query) : this._searchLogical(query);
+      computeScore$1(results, this._keyStore);
 
-          var searchResult = searcher.searchIn(value);
-          var isMatch = searchResult.isMatch,
-              score = searchResult.score;
+      if (shouldSort) {
+        results.sort(sortFn);
+      }
 
-          if (!isMatch) {
-            continue;
-          }
+      if (isNumber(limit) && limit > -1) {
+        results = results.slice(0, limit);
+      }
 
-          var match = {
-            score: score,
-            value: text
-          };
+      return format(results, this._docs, {
+        includeMatches: includeMatches,
+        includeScore: includeScore
+      });
+    }
+  }, {
+    key: "_searchStringList",
+    value: function _searchStringList(query) {
+      var searcher = createSearcher(query, this.options);
+      var records = this._myIndex.records;
+      var results = []; // Iterate over every string in the index
 
-          if (includeMatches) {
-            match.indices = searchResult.matchedIndices;
-          }
+      records.forEach(function (_ref2) {
+        var text = _ref2.v,
+            idx = _ref2.i,
+            norm = _ref2.n;
 
+        if (!isDefined(text)) {
+          return;
+        }
+
+        var _searcher$searchIn = searcher.searchIn(text),
+            isMatch = _searcher$searchIn.isMatch,
+            score = _searcher$searchIn.score,
+            indices = _searcher$searchIn.indices;
+
+        if (isMatch) {
           results.push({
             item: text,
             idx: idx,
-            matches: [match]
+            matches: [{
+              score: score,
+              value: text,
+              norm: norm,
+              indices: indices
+            }]
           });
         }
-      } else {
-        // List is Array<Object>
-        var keyNames = this._keyStore.keys();
-
-        var keysLen = this._keyStore.count();
-
-        for (var _i = 0, _len = list.length; _i < _len; _i += 1) {
-          var _list$_i = list[_i],
-              item = _list$_i.$,
-              _idx = _list$_i.idx;
-
-          if (!isDefined(item)) {
-            continue;
-          }
-
-          var matches = []; // Iterate over every key (i.e, path), and fetch the value at that key
-
-          for (var j = 0; j < keysLen; j += 1) {
-            var key = keyNames[j];
-            var _value = item[key];
-
-            if (!isDefined(_value)) {
-              continue;
-            }
-
-            if (isArray(_value)) {
-              for (var k = 0, _len2 = _value.length; k < _len2; k += 1) {
-                var arrItem = _value[k];
-                var _text = arrItem.$;
-                var _idx2 = arrItem.idx;
-
-                if (!isDefined(_text)) {
-                  continue;
-                }
-
-                var _searchResult = searcher.searchIn(arrItem);
-
-                var _isMatch = _searchResult.isMatch,
-                    _score = _searchResult.score;
-
-                if (!_isMatch) {
-                  continue;
-                }
-
-                var _match = {
-                  score: _score,
-                  key: key,
-                  value: _text,
-                  idx: _idx2
-                };
-
-                if (includeMatches) {
-                  _match.indices = _searchResult.matchedIndices;
-                }
-
-                matches.push(_match);
-              }
-            } else {
-              var _text2 = _value.$;
-
-              var _searchResult2 = searcher.searchIn(_value);
-
-              var _isMatch2 = _searchResult2.isMatch,
-                  _score2 = _searchResult2.score;
-
-              if (!_isMatch2) {
-                continue;
-              }
-
-              var _match2 = {
-                score: _score2,
-                key: key,
-                value: _text2
-              };
-
-              if (includeMatches) {
-                _match2.indices = _searchResult2.matchedIndices;
-              }
-
-              matches.push(_match2);
-            }
-          }
-
-          if (matches.length) {
-            results.push({
-              idx: _idx,
-              item: item,
-              matches: matches
-            });
-          }
-        }
-      }
-
+      });
       return results;
     }
   }, {
-    key: "_computeScore",
-    value: function _computeScore(results) {
-      for (var i = 0, len = results.length; i < len; i += 1) {
-        var result = results[i];
-        var matches = result.matches;
-        var scoreLen = matches.length;
-        var totalWeightedScore = 1;
+    key: "_searchLogical",
+    value: function _searchLogical(query) {
 
-        for (var j = 0; j < scoreLen; j += 1) {
-          var item = matches[j];
-          var key = item.key;
-
-          var keyWeight = this._keyStore.get(key, 'weight');
-
-          var weight = keyWeight > -1 ? keyWeight : 1;
-          var score = item.score === 0 && keyWeight > -1 ? Number.EPSILON : item.score;
-          totalWeightedScore *= Math.pow(score, weight);
-        }
-
-        result.score = totalWeightedScore;
+      {
+        throw new Error(LOGICAL_SEARCH_UNAVAILABLE);
       }
     }
   }, {
-    key: "_sort",
-    value: function _sort(results) {
-      results.sort(this.options.sortFn);
+    key: "_searchObjectList",
+    value: function _searchObjectList(query) {
+      var _this2 = this;
+
+      var searcher = createSearcher(query, this.options);
+      var _this$_myIndex2 = this._myIndex,
+          keys = _this$_myIndex2.keys,
+          records = _this$_myIndex2.records;
+      var results = []; // List is Array<Object>
+
+      records.forEach(function (_ref5) {
+        var item = _ref5.$,
+            idx = _ref5.i;
+
+        if (!isDefined(item)) {
+          return;
+        }
+
+        var matches = []; // Iterate over every key (i.e, path), and fetch the value at that key
+
+        keys.forEach(function (key, keyIndex) {
+          matches.push.apply(matches, _toConsumableArray(_this2._findMatches({
+            key: key,
+            value: item[keyIndex],
+            searcher: searcher
+          })));
+        });
+
+        if (matches.length) {
+          results.push({
+            idx: idx,
+            item: item,
+            matches: matches
+          });
+        }
+      });
+      return results;
     }
   }, {
-    key: "_format",
-    value: function _format(results) {
-      var finalOutput = [];
-      var _this$options = this.options,
-          includeMatches = _this$options.includeMatches,
-          includeScore = _this$options.includeScore;
-      var transformers = [];
-      if (includeMatches) transformers.push(transformMatches);
-      if (includeScore) transformers.push(transformScore);
+    key: "_findMatches",
+    value: function _findMatches(_ref6) {
+      var key = _ref6.key,
+          value = _ref6.value,
+          searcher = _ref6.searcher;
 
-      for (var i = 0, len = results.length; i < len; i += 1) {
-        var result = results[i];
-        var idx = result.idx;
-        var data = {
-          item: this.list[idx],
-          refIndex: idx
-        };
+      if (!isDefined(value)) {
+        return [];
+      }
 
-        if (transformers.length) {
-          for (var j = 0, _len3 = transformers.length; j < _len3; j += 1) {
-            transformers[j](result, data);
+      var matches = [];
+
+      if (isArray(value)) {
+        value.forEach(function (_ref7) {
+          var text = _ref7.v,
+              idx = _ref7.i,
+              norm = _ref7.n;
+
+          if (!isDefined(text)) {
+            return;
           }
-        }
 
-        finalOutput.push(data);
+          var _searcher$searchIn2 = searcher.searchIn(text),
+              isMatch = _searcher$searchIn2.isMatch,
+              score = _searcher$searchIn2.score,
+              indices = _searcher$searchIn2.indices;
+
+          if (isMatch) {
+            matches.push({
+              score: score,
+              key: key,
+              value: text,
+              idx: idx,
+              norm: norm,
+              indices: indices
+            });
+          }
+        });
+      } else {
+        var text = value.v,
+            norm = value.n;
+
+        var _searcher$searchIn3 = searcher.searchIn(text),
+            isMatch = _searcher$searchIn3.isMatch,
+            score = _searcher$searchIn3.score,
+            indices = _searcher$searchIn3.indices;
+
+        if (isMatch) {
+          matches.push({
+            score: score,
+            key: key,
+            value: text,
+            norm: norm,
+            indices: indices
+          });
+        }
       }
 
-      return finalOutput;
-    }
-  }], [{
-    key: "register",
-    value: function register() {
-      registeredSearchers.push.apply(registeredSearchers, arguments);
+      return matches;
     }
   }]);
 
   return Fuse;
-}();
+}(); // Practical scoring function
 
-Fuse.version = '5.2.0-alpha.0';
+function computeScore$1(results, keyStore) {
+  results.forEach(function (result) {
+    var totalScore = 1;
+    result.matches.forEach(function (_ref8) {
+      var key = _ref8.key,
+          norm = _ref8.norm,
+          score = _ref8.score;
+      var weight = keyStore.get(key, 'weight');
+      totalScore *= Math.pow(score === 0 && weight ? Number.EPSILON : score, (weight || 1) * norm);
+    });
+    result.score = totalScore;
+  });
+}
+
+function format(results, docs) {
+  var _ref9 = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {},
+      _ref9$includeMatches = _ref9.includeMatches,
+      includeMatches = _ref9$includeMatches === void 0 ? Config.includeMatches : _ref9$includeMatches,
+      _ref9$includeScore = _ref9.includeScore,
+      includeScore = _ref9$includeScore === void 0 ? Config.includeScore : _ref9$includeScore;
+
+  var transformers = [];
+  if (includeMatches) transformers.push(transformMatches);
+  if (includeScore) transformers.push(transformScore);
+  return results.map(function (result) {
+    var idx = result.idx;
+    var data = {
+      item: docs[idx],
+      refIndex: idx
+    };
+
+    if (transformers.length) {
+      transformers.forEach(function (transformer) {
+        transformer(result, data);
+      });
+    }
+
+    return data;
+  });
+}
+
+Fuse.version = '6.0.0';
 Fuse.createIndex = createIndex;
+Fuse.parseIndex = parseIndex;
 Fuse.config = Config;
+
+{
+  Fuse.parseQuery = parse;
+}
 
 module.exports = Fuse;
